@@ -1,0 +1,27 @@
+# ESP-IDF build output
+build/
+**/build/
+
+# Local ESP-IDF / CMake generated config
+sdkconfig
+sdkconfig.old
+dependencies.lock
+
+# IDE / editor
+.vscode/
+.idea/
+*.code-workspace
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Cursor / local
+.cursor/
