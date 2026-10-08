@@ -530,29 +530,28 @@ The final addresses shall be configurable.
 
 # 21. Moisture Sensor Requirements
 
-The rice moisture/EC sensor provides an analog output.
+The rice moisture/EC sensor provides an analog output. An ADS1115 16-bit I2C ADC shall read that output.
 
-The exact electrical interface shall be verified against the final sensor datasheet.
+The exact electrical interface shall be verified against the final sensor datasheet and the ADS1115 datasheet.
 
-The ESP32-S3 ADC shall not be connected directly to a 0-5 V signal.
-
-A signal-conditioning stage shall be provided.
+The ESP32-S3 shall not be connected directly to a 0-5 V signal.
 
 The interface shall include, where required:
 
-- Voltage divider
+- ADS1115 supply and programmable-gain selection
+- I2C level shifting when the ADS1115 is powered from 5 V
+- Voltage scaling when the ADS1115 is powered from 3.3 V
 - Input protection
 - RC filtering
 - Over-voltage protection
 - Appropriate grounding
-- ADC scaling
 
-The firmware shall convert the ADC reading into an engineering value using a calibration model.
+The firmware shall convert the ADS1115 reading into an engineering value using a calibration model.
 
 Example:
 
 ```text
-ADC Reading
+ADS1115 Reading
     |
     v
 Voltage Conversion
@@ -564,7 +563,7 @@ Calibration
 Moisture %
 ```
 
-If the selected sensor provides separate moisture and EC outputs, each output shall use an independent ADC input.
+If the selected sensor provides separate moisture and EC outputs, each output shall use an independent ADS1115 input.
 
 The final implementation shall follow the selected sensor's datasheet.
 
@@ -1154,7 +1153,7 @@ RS485 Driver
 Modbus Driver
 Sensor Manager
 Relay Manager
-ADC Driver
+ADS1115 Driver
 RTC Driver
 SD Driver
 Display Driver
@@ -1162,7 +1161,7 @@ Touch Driver
 Wi-Fi/Web Server
 ```
 
-Application logic should not directly depend on low-level GPIO or ADC implementation.
+Application logic should not directly depend on low-level GPIO or ADS1115 register access.
 
 ---
 
@@ -1172,7 +1171,7 @@ The system shall provide diagnostic information for:
 
 - RS485 devices
 - Sensor values
-- ADC readings
+- ADS1115 readings
 - Relay states
 - Door state
 - Elevator state
@@ -1246,7 +1245,7 @@ main/
 ├── drivers/
 │   ├── rs485/
 │   ├── modbus/
-│   ├── adc/
+│   ├── ads1115/
 │   ├── rtc/
 │   ├── sd/
 │   └── relay/

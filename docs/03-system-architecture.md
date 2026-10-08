@@ -93,7 +93,7 @@ These functions remain inside the hybrid inverter and its associated power syste
        Sensors       Actuators       HMI
           │             │             │
           v             v             v
-      RS485/ADC      RS485 Relay    LCD/Touch
+   RS485/ADS1115   RS485 Relay    LCD/Touch
 ```
 
 ---
@@ -144,13 +144,15 @@ Architecture:
                   ┌────────────┴────────────┐
                   │                         │
                   v                         v
-             RS485 Modbus                 ADC
+             RS485 Modbus                  I2C
                   │                         │
-          ┌───────┴────────┐                │
-          │                │                │
-          v                v                v
-     Hot-Air Sensor   Chamber Sensor   Moisture / EC
-     Temp + RH        Temp + RH        Sensor
+          ┌───────┴────────┐         ┌──────┴──────┐
+          │                │         │             │
+          v                v         v             v
+     Hot-Air Sensor   Chamber Sensor TinyRTC    ADS1115
+     Temp + RH        Temp + RH                   │
+                                                  v
+                                            Moisture / EC
 ```
 
 ---
@@ -189,9 +191,7 @@ The Sensor Manager is responsible for:
 
 # 6. Moisture Sensor Architecture
 
-The moisture/EC sensor provides an analog signal.
-
-Because the selected sensor uses a 0-5 V output, the signal must pass through an analog interface before reaching the ESP32-S3.
+The moisture/EC sensor provides a 0-5 V analog signal. An ADS1115 16-bit I2C ADC reads that signal. The 0-5 V output must not be connected to an ESP32 GPIO.
 
 ```text
 Moisture / EC Sensor
@@ -199,17 +199,17 @@ Moisture / EC Sensor
         | 0-5 V
         v
 ┌────────────────────┐
-│ Analog Interface   │
+│ Signal Interface   │
 │                    │
-│ Voltage Scaling    │
 │ Protection         │
 │ Filtering          │
+│ Scaling if needed  │
 └─────────┬──────────┘
           |
-          | Safe ADC Voltage
           v
-      ESP32-S3 ADC
+       ADS1115
           |
+          | I2C
           v
     Sensor Manager
           |
@@ -220,11 +220,9 @@ Moisture / EC Sensor
    Moisture / EC Value
 ```
 
-The ESP32-S3 ADC must never receive a voltage above its permitted input range.
+The ADS1115 input must stay within its supply-limited range. Power it from 5 V and level-shift I2C to the ESP32, or power it from 3.3 V and scale the sensor output first.
 
-The exact analog interface shall be finalized based on the selected sensor's electrical specifications.
-
-If the final sensor provides separate moisture and EC analog outputs, each output shall use its own ADC input.
+If the sensor provides separate moisture and EC outputs, each output shall use its own ADS1115 input.
 
 ---
 
@@ -998,7 +996,7 @@ The software architecture shall use layered responsibilities.
                        |
 ┌──────────────────────v─────────────────────┐
 │              DRIVER LAYER                  │
-│ RS485 / Modbus / ADC / RTC / SD / Relay   │
+│ RS485 / Modbus / ADS1115 / RTC / SD / Relay │
 └──────────────────────┬─────────────────────┘
                        |
 ┌──────────────────────v─────────────────────┐
@@ -1241,7 +1239,7 @@ services/
 drivers/
 ├── rs485
 ├── modbus
-├── adc
+├── ads1115
 ├── rtc
 ├── sd
 └── relay
@@ -1429,7 +1427,7 @@ The Solar Hybrid Rice Dryer is built around an ESP32-S3 control architecture.
 The controller:
 
 - Reads temperature and humidity through RS485 Modbus.
-- Reads moisture/EC through an analog interface.
+- Reads moisture/EC through an ADS1115 I2C ADC.
 - Maintains time using the RTC.
 - Controls the heater, fan, elevator, and discharge door through the relay controller.
 - Runs the drying state machine.

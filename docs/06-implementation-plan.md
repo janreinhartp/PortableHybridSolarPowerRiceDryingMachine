@@ -133,7 +133,7 @@ Recommended structure:
 drivers/
 ├── rs485/
 ├── modbus/
-├── adc/
+├── ads1115/
 ├── rtc/
 ├── sd/
 └── relay/
@@ -221,34 +221,36 @@ Result modbusReadHoldingRegisters(
 
 ---
 
-# 7. ADC Driver
+# 7. ADS1115 Driver
 
 ## Objective
 
-Create the analog input interface for the moisture/EC sensor.
+Create the I2C analog input interface for the moisture/EC sensor.
 
 ## Tasks
 
-- Configure ESP32-S3 ADC
-- Configure ADC channel
-- Read raw ADC value
-- Convert ADC value to voltage
+- Initialize the ADS1115 on the shared I2C bus
+- Confirm the I2C address, default 0x48
+- Select the moisture input and the EC input
+- Select the programmable gain
+- Read the raw conversion code
+- Convert the code to voltage
 - Apply filtering
-- Detect out-of-range values
+- Detect out-of-range values and I2C failures
 
 Important:
 
-The ESP32-S3 ADC must not receive a raw 0-5 V signal.
-
-The analog interface must include the required voltage scaling and protection hardware.
+The ESP32-S3 must not receive a raw 0-5 V signal. The ADS1115 is the only device that measures the moisture and EC outputs.
 
 ### Acceptance Criteria
 
 ```text
-[ ] ADC reads correctly
+[ ] ADS1115 responds on I2C
+[ ] Moisture and EC channels read correctly
 [ ] Voltage conversion is correct
 [ ] Filtering works
 [ ] Out-of-range readings are detected
+[ ] I2C failure is detected
 ```
 
 ---
@@ -389,8 +391,8 @@ Each sensor reading should be checked for:
 
 ## Tasks
 
-- Read ADC
-- Convert ADC to voltage
+- Read the ADS1115
+- Convert the ADS1115 code to voltage
 - Apply calibration
 - Calculate moisture
 - Filter reading
@@ -1433,8 +1435,9 @@ ESP32-S3
  |     +-- Chamber Sensor
  |     +-- Relay Board
  |
- +-- ADC
-       +-- Moisture/EC Sensor
+ +-- I2C
+       +-- ADS1115
+             +-- Moisture/EC Sensor
 ```
 
 Actuators:
@@ -1465,7 +1468,7 @@ Recommended sequence:
 5. RS485 + Sensor 1
 6. RS485 + Sensor 2
 7. RS485 + Relay Board
-8. ADC + Moisture Sensor
+8. ADS1115 + Moisture Sensor
 9. Elevator
 10. Fan
 11. Door
@@ -1544,7 +1547,7 @@ Recommended procedure:
 1. Prepare rice samples with known moisture levels.
 2. Measure each sample using a reference moisture meter.
 3. Measure the same samples using the dryer sensor.
-4. Record ADC/voltage values.
+4. Record ADS1115 voltage values.
 5. Calculate the calibration curve.
 6. Store calibration parameters.
 7. Repeat the measurements.
@@ -1838,7 +1841,7 @@ The actual coding sequence should be:
 06. Modbus Driver
 07. Temperature/RH Sensors
 08. Relay Driver
-09. ADC Driver
+09. ADS1115 Driver
 10. Moisture/EC Sensor
 11. Sensor Manager
 12. Actuator Manager

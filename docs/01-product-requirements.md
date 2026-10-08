@@ -389,7 +389,7 @@ Purpose:
 - Monitor rice moisture.
 - Monitor EC when supported by the sensor configuration.
 
-The sensor provides an analog output and requires an appropriate signal-conditioning and voltage-scaling interface before connection to the ESP32-S3.
+The sensor provides an analog output. An ADS1115 16-bit I2C ADC reads that output. The 0-5 V signal must not be connected to an ESP32 GPIO.
 
 The exact sensor output configuration must be confirmed from the sensor datasheet before final hardware implementation.
 

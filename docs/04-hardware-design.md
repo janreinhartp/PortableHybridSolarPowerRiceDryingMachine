@@ -31,7 +31,7 @@ The ESP32 controls the rice drying machine only.
 | 0-5 V moisture/EC sensor | 1 | Rice moisture and EC measurement |
 | RS485 temperature/humidity sensor | 2 | Hot-air and chamber monitoring |
 | TinyRTC | 1 | Real-time clock |
-| AS1115 | 1 | Auxiliary hardware, function TBD |
+| ADS1115 | 1 | 16-bit I2C ADC for moisture and EC |
 | SD card | 1 | Data logging |
 | 620 W bifacial solar panel | 1 | Solar power source |
 | ECGSOLAX hybrid inverter | 1 | Power management |
@@ -74,12 +74,16 @@ The ESP32-S3 interfaces with the rest of the system through:
                  ESP32-S3
                     |
        +------------+-------------+
-       |            |             |
-       v            v             v
-     RS485         ADC           I2C
-       |            |             |
-       v            v             v
- Sensors/Relay   Moisture/EC    RTC
+       |                          |
+       v                          v
+     RS485                       I2C
+       |                          |
+       v                          +---- TinyRTC
+ Sensors/Relay                    |
+                                  +---- ADS1115
+                                         |
+                                         v
+                                    Moisture / EC
 ```
 
 Additional interfaces:
@@ -579,9 +583,7 @@ Recommended practices:
 
 The selected moisture/EC sensor provides a 0-5 V analog output.
 
-The ESP32-S3 ADC cannot accept a raw 0-5 V signal.
-
-A signal-conditioning circuit is required.
+An ADS1115 reads that output. The ESP32-S3 must not receive the 0-5 V signal on a GPIO.
 
 Recommended architecture:
 
@@ -593,17 +595,25 @@ Moisture / EC Sensor
 ┌──────────────────┐
 │ Signal Interface │
 │                  │
-│ Voltage Divider  │
 │ Protection       │
 │ RC Filter        │
+│ Scaling if needed│
 └────────┬─────────┘
          |
-         | ADC-safe voltage
          v
-     ESP32-S3 ADC
+      ADS1115
+         |
+         | I2C
+         v
+      ESP32-S3
 ```
 
-The exact resistor values shall be selected after confirming the ESP32-S3 ADC configuration and the final sensor's output characteristics.
+The ADS1115 analog input must stay within VDD + 0.3 V. Two supply choices are acceptable:
+
+- Power the ADS1115 from 5 V so a 0-5 V sensor is inside its absolute maximum, set the programmable gain full-scale range to ±6.144 V, and level-shift SDA and SCL to the 3.3 V ESP32.
+- Power the ADS1115 from 3.3 V and scale the sensor output with a divider and protection so the pin stays inside the selected full-scale range.
+
+The exact scaling, gain, and supply shall be confirmed from the ADS1115 datasheet and the moisture sensor datasheet.
 
 ---
 
@@ -617,7 +627,7 @@ The analog input circuit should include:
 - Over-voltage protection
 - Stable ground reference
 
-The design shall prevent accidental sensor voltage from exceeding the ADC input range.
+The design shall prevent the sensor voltage from exceeding the ADS1115 input range, and shall keep 0-5 V off every ESP32 pin.
 
 The analog wiring should be kept away from:
 
@@ -706,22 +716,27 @@ The controller shall periodically read the RTC for timestamps.
 
 ---
 
-# 27. AS1115
+# 27. ADS1115
 
-The AS1115 is currently included as an auxiliary component.
+The ADS1115 is the analog-to-digital converter for the moisture and EC sensor.
 
-Its final purpose is not yet defined in the system requirements.
-
-Therefore:
+It is a 16-bit I2C ADC with four single-ended inputs. Moisture and EC use separate inputs when the sensor provides both signals.
 
 ```text id="3q9gh2"
-AS1115
-Status: TBD
+ESP32-S3
+    |
+    | I2C
+    v
+ ADS1115
+    |
+    +---- Moisture
+    |
+    +---- EC
 ```
 
-The component should not be assigned a critical control function until its intended application is confirmed.
+The ADS1115 shares the controller I2C bus with the TinyRTC. Its address is set by the ADDR pin. The default address is 0x48, and it must not collide with the TinyRTC, the GT911 touch controller, or the board I/O expander.
 
-Possible uses may be considered during later hardware development, but no dependency should be introduced into the core drying-control architecture at this stage.
+The firmware selects the input channel and programmable gain, then converts the raw code to voltage before calibration.
 
 ---
 
@@ -1159,7 +1174,7 @@ The hardware design shall be considered ready for integrated testing when:
 4. RTC provides valid time.
 5. RS485 communication is stable.
 6. Both temperature/humidity sensors respond correctly.
-7. Moisture/EC analog input remains within the ADC-safe range.
+7. The ADS1115 reads moisture and EC inside its allowed input range, and 0-5 V never reaches an ESP32 pin.
 8. Moisture readings can be calibrated.
 9. Relay controller responds correctly.
 10. Elevator motor operates safely.
@@ -1210,7 +1225,7 @@ Unused relay channels and controller interfaces should remain available for futu
 
 ### No Direct 0-5 V to ESP32
 
-All 0-5 V sensor outputs require appropriate signal conditioning before ADC connection.
+All 0-5 V sensor outputs connect to the ADS1115, with supply, gain, and protection chosen so the signal stays inside the ADS1115 ratings. They do not connect to an ESP32 GPIO.
 
 ### No Direct High-Power Heater Switching
 
@@ -1240,13 +1255,15 @@ The final hardware architecture is:
         ESP32-S3                        |
              |                           |
      +-------+-------+                   |
-     |       |       |                   |
-     v       v       v                   |
-   RS485    ADC     I2C                  |
-     |       |       |                   |
-     |       |       +--> TinyRTC        |
-     |       |                           |
-     |       +---------- Moisture/EC     |
+     |               |                   |
+     v               v                   |
+   RS485            I2C                  |
+     |               |                   |
+     |               +--> TinyRTC        |
+     |               |                   |
+     |               +--> ADS1115        |
+     |                     |             |
+     |                     +--> Moisture / EC
      |                                   |
      +--> Temp/RH Sensor 1               |
      +--> Temp/RH Sensor 2               |

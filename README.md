@@ -261,11 +261,9 @@ Two waterproof RS485 Modbus temperature/humidity probes:
 
 A 0-5 V analog sensor is used for moisture and EC measurement.
 
-The exact electrical interface must follow the selected sensor datasheet.
+An ADS1115 16-bit I2C ADC reads that sensor. The 0-5 V signal must not connect to an ESP32 GPIO.
 
-The ESP32-S3 ADC must not receive a raw 0-5 V signal directly.
-
-Signal conditioning and voltage scaling are required.
+The exact electrical interface must follow the selected sensor datasheet and the ADS1115 datasheet.
 
 ### RTC
 
@@ -366,7 +364,7 @@ The firmware is based on:
 +------------------v-------------------+
 |             Driver Layer             |
 |                                      |
-| RS485 | Modbus | ADC | RTC | SD     |
+| RS485 | Modbus | ADS1115 | RTC | SD |
 | Relay                                |
 +------------------+-------------------+
                    |
@@ -401,7 +399,7 @@ main/
 ├── drivers/
 │   ├── rs485/
 │   ├── modbus/
-│   ├── adc/
+│   ├── ads1115/
 │   ├── rtc/
 │   ├── sd/
 │   └── relay/
@@ -727,7 +725,7 @@ Each subsystem should be tested before full integration.
 06. Modbus
 07. Temperature/RH Sensors
 08. Relay Board
-09. ADC
+09. ADS1115
 10. Moisture/EC Sensor
 11. Sensor Manager
 12. Actuator Manager
@@ -837,10 +835,11 @@ Important measurements:
 
 # 25. Documentation
 
-The project documentation is divided into six main design documents.
+The project documentation is divided into six design documents plus the master plan.
 
 | Document | Purpose |
 |---|---|
+| `docs/MASTERPLAN.md` | Implementation roadmap and locked build decisions |
 | `01-product-requirements.md` | Product scope and functional requirements |
 | `02-technical-requirements.md` | Technical and software requirements |
 | `03-system-architecture.md` | Complete system architecture |
@@ -848,12 +847,18 @@ The project documentation is divided into six main design documents.
 | `05-software-design.md` | Firmware and software architecture |
 | `06-implementation-plan.md` | Development and testing plan |
 
+Start implementation from [`docs/MASTERPLAN.md`](docs/MASTERPLAN.md).
+
 ---
 
 # 26. Documentation Map
 
 ```text
 README.md
+   |
+   +-- MASTERPLAN
+   |       |
+   |       +-- How to build from the current repo
    |
    +-- 01 Product Requirements
    |       |
@@ -877,7 +882,7 @@ README.md
    |
    +-- 06 Implementation Plan
            |
-           +-- How the system will be built
+           +-- Detailed phase checklist
 ```
 
 ---
@@ -968,20 +973,24 @@ Do not assume:
 
 unless the sensor datasheet explicitly defines separate outputs or an appropriate multiplexed interface.
 
-The ADC interface must include:
+The ADS1115 interface must include:
 
-- Voltage scaling
+- Supply and programmable-gain selection
+- I2C level shifting when the ADS1115 is powered from 5 V
+- Voltage scaling when the ADS1115 is powered from 3.3 V
 - Input protection
 - Filtering
 - Appropriate grounding
 
 ---
 
-## AS1115
+## ADS1115
 
-The exact function of the AS1115 in the final hardware design remains TBD.
+The ADS1115 is the 16-bit I2C ADC for the moisture and EC sensor.
 
-Its use should be confirmed before implementing the related driver.
+It shares the controller I2C bus with the TinyRTC. The default address is 0x48. Moisture and EC use separate inputs when the sensor provides both signals.
+
+The 0-5 V sensor output connects to the ADS1115, not to an ESP32 pin.
 
 ---
 
@@ -1114,6 +1123,8 @@ The primary objective is **safe, repeatable, measurable, and maintainable rice d
 
 **Timekeeping:** TinyRTC
 
+**Analog input:** ADS1115 16-bit I2C ADC
+
 **Power System:** ECGSOLAX 2000 W 12 V Hybrid Inverter
 
 **Battery:** 100 Ah
@@ -1196,6 +1207,10 @@ Do not connect the high-power heater to the system until the low-voltage control
 
 # 36. Next Development Step
 
+Follow the execution order in:
+
+[`docs/MASTERPLAN.md`](docs/MASTERPLAN.md)
+
 The first firmware milestone is:
 
 ```text
@@ -1210,8 +1225,4 @@ SD Card
 RTC
 ```
 
-Once this foundation is stable, implement the RS485 and Modbus layer.
-
-The project should then progress through the implementation plan defined in:
-
-`06-implementation-plan.md`
+Once this foundation is stable, implement the RS485, Modbus, and ADS1115 layers, then continue through the master plan phases.

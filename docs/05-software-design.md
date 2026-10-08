@@ -53,7 +53,7 @@ The software follows a layered architecture.
 | Settings | Diagnostics | Web | RTC              |
 +--------------------------------------------------+
 |                 Driver Layer                    |
-| RS485 | Modbus | ADC | RTC | SD | Relay        |
+| RS485 | Modbus | ADS1115 | RTC | SD | Relay    |
 +--------------------------------------------------+
 |              ESP-IDF / FreeRTOS                 |
 +--------------------------------------------------+
@@ -280,9 +280,7 @@ The system must not block the main process controller while waiting for a Modbus
 
 # 6. Analog Moisture and EC Interface
 
-The moisture/EC sensor provides an analog signal.
-
-The software receives the conditioned ADC value.
+The moisture/EC sensor provides an analog signal. An ADS1115 reads that signal over I2C and returns a 16-bit code.
 
 ```text
 Sensor
@@ -291,18 +289,19 @@ Sensor
 Signal Conditioning
    |
    v
-ESP32-S3 ADC
+ADS1115
    |
+   | I2C
    v
-ADC Driver
+ADS1115 Driver
    |
    v
 Sensor Manager
 ```
 
-The ADC driver provides raw readings.
+The ADS1115 driver selects the input channel and gain, then provides the raw code and the converted voltage.
 
-The Sensor Manager converts the raw ADC value into engineering units.
+The Sensor Manager converts that voltage into engineering units.
 
 Example:
 
@@ -327,10 +326,10 @@ Example:
 
 ```text
 Calibration Point 1
-ADC/Voltage -> Reference Moisture
+ADS1115 Voltage -> Reference Moisture
 
 Calibration Point 2
-ADC/Voltage -> Reference Moisture
+ADS1115 Voltage -> Reference Moisture
 ```
 
 The initial implementation may use linear interpolation.
@@ -1689,7 +1688,7 @@ The Diagnostics module monitors:
 
 - Sensor communication
 - Modbus communication
-- ADC readings
+- ADS1115 readings
 - SD card status
 - RTC status
 - Relay communication
@@ -1803,7 +1802,7 @@ main/
 ├── drivers/
 │   ├── rs485/
 │   ├── modbus/
-│   ├── adc/
+│   ├── ads1115/
 │   ├── rtc/
 │   ├── sd/
 │   └── relay/
@@ -1937,7 +1936,7 @@ Test individual modules:
 Test:
 
 - Sensor Manager + Modbus
-- Sensor Manager + ADC
+- Sensor Manager + ADS1115
 - Process Controller + Actuator Manager
 - Logger + SD
 - HMI + Process Controller
@@ -2133,7 +2132,7 @@ The complete software architecture is:
                     |    Driver Layer      |
                     |                      |
                     | RS485 / Modbus       |
-                    | ADC                  |
+                    | ADS1115              |
                     | RTC                  |
                     | SD                   |
                     | Relay               |
