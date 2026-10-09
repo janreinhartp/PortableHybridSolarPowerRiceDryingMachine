@@ -79,17 +79,28 @@ Do not add a second I2C controller.
 
 ---
 
-## 5. Product control pins
+## 5. Product control pins — onboard RS485
 
-These pins are reserved for RS485. Firmware must not drive them for unrelated functions.
+The Waveshare board already has an **SP3485** transceiver with **automatic direction control**.
+Use the HY2.0 RS485 A/B header. Do **not** drive a separate DE/RE GPIO.
 
 | GPIO | Direction | Function | Phase |
 |-----:|-----------|----------|------:|
-| 15 | Out | RS485 UART1 TX | 3 |
-| 16 | In | RS485 UART1 RX | 3 |
-| 26 | Out | RS485 DE/RE (high = transmit) | 3 |
+| 16 | Out | UART1 TX → transceiver DI | 3 |
+| 15 | In | UART1 RX ← transceiver RO | 3 |
 
-UART for Modbus/RS485: **UART1** at 9600 8N1 (confirmed when sensors are wired).
+Schematic net names `RS485_TXD` / `RS485_RXD` are from the transceiver side and look swapped vs ESP UART names — that is expected (Waveshare FAQ).
+
+UART for Modbus/RS485: **UART1** at **9600 8N1**.
+
+| Modbus addr | Device |
+|------------:|--------|
+| 1 | Hot-air temperature/humidity |
+| 2 | Chamber temperature/humidity |
+| 10 | 8-channel relay board |
+
+Default T/H register map (confirm with sensor datasheet): humidity×10 at reg 0, temperature×10 at reg 1 (FC04 then FC03 fallback).
+Relay coils: R1=0 … R8=7 (FC05 write, FC01 read). R4/R5 must never both be ON.
 
 ---
 
@@ -97,14 +108,16 @@ UART for Modbus/RS485: **UART1** at 9600 8N1 (confirmed when sensors are wired).
 
 | GPIO | Notes |
 |-----:|-------|
-| 27 | Spare (previously considered for door OPEN limit — unused) |
-| 28 | Spare (previously considered for door CLOSE limit — unused) |
-| 29 | Spare (previously considered for ESP32 E-stop input — unused) |
-| 30 | Spare digital I/O |
-| 31 | Spare digital I/O |
-| 32 | Spare digital I/O |
+| 6 | Board GPIO header (often the only clearly free digital I/O) |
+| 26 | Not used (was wrongly claimed as DE/RE — onboard RS485 is auto-DE) |
+| 27 | Spare if present on header |
+| 28 | Spare if present on header |
+| 29 | Spare if present on header |
+| 30 | Spare if present on header |
+| 31 | Spare if present on header |
+| 32 | Spare if present on header |
 
-Confirm availability on the physical header before wiring.
+Confirm availability on the physical header before wiring. Door limits and E-stop are not ESP32 inputs.
 
 ---
 

@@ -4,6 +4,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "nvs_flash.h"
+#include "relay_modbus.h"
 #include "ui_manager.h"
 
 static const char *TAG = "main";
@@ -14,19 +15,28 @@ static unsigned s_touch_taps = 0;
 static void runtime_status_task(void *arg)
 {
     (void)arg;
+    bool safe_off_attempted = false;
+
     while (true) {
         dryer_controller_refresh_heap(&s_status);
+        dryer_controller_poll_fieldbus(&s_status);
 
-        if (s_status.rtc_ok) {
-            ESP_LOGI(TAG, "rtc=%04u-%02u-%02u %02u:%02u:%02u heap=%u taps=%u",
-                     s_status.rtc_year, s_status.rtc_month, s_status.rtc_day,
-                     s_status.rtc_hour, s_status.rtc_minute, s_status.rtc_second,
-                     (unsigned)s_status.free_heap, s_touch_taps);
-        } else {
-            ESP_LOGW(TAG, "rtc=FAIL heap=%u taps=%u sd=%s",
-                     (unsigned)s_status.free_heap, s_touch_taps,
-                     s_status.sd_ok ? "ok" : "missing");
+        /* Once the relay answers, force a safe all-OFF (fail-soft if it drops). */
+        if (s_status.relay_ok && !safe_off_attempted) {
+            safe_off_attempted = true;
+            ESP_LOGI(TAG, "Relay online — commanding all coils OFF");
+            relay_modbus_all_off();
+            dryer_controller_poll_fieldbus(&s_status);
         }
+
+        ESP_LOGI(TAG,
+                 "hotair=%s/%.1fC chamber=%s/%.1fC relay=%s@%u elev=%d heat=%d fan=%d door=%d/%d",
+                 s_status.hotair_ok ? "ok" : "fail", s_status.hotair_temp_c,
+                 s_status.chamber_ok ? "ok" : "fail", s_status.chamber_temp_c,
+                 s_status.relay_ok ? "ok" : "fail", (unsigned)relay_modbus_address(),
+                 (int)s_status.relay_elevator, (int)s_status.relay_heater,
+                 (int)s_status.relay_fan,
+                 (int)s_status.relay_door_open, (int)s_status.relay_door_close);
 
         if (board_hal_lvgl_lock(100)) {
             ui_manager_update_runtime(&s_status, s_touch_taps);
@@ -38,7 +48,7 @@ static void runtime_status_task(void *arg)
 
 extern "C" void app_main(void)
 {
-    ESP_LOGI(TAG, "Hybrid Solar Power Rice Dryer firmware starting (Phase 2)");
+    ESP_LOGI(TAG, "Hybrid Solar Power Rice Dryer firmware starting (Phase 3)");
 
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -59,6 +69,6 @@ extern "C" void app_main(void)
         board_hal_lvgl_unlock();
     }
 
-    xTaskCreate(runtime_status_task, "runtime_status", 4096, nullptr, 3, nullptr);
-    ESP_LOGI(TAG, "Phase 2 running");
+    xTaskCreate(runtime_status_task, "runtime_status", 6144, nullptr, 3, nullptr);
+    ESP_LOGI(TAG, "Phase 3 running");
 }

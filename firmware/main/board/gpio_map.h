@@ -22,10 +22,10 @@
 /* Touch interrupt (already used) */
 #define RICE_GPIO_TOUCH_INT         GPIO_NUM_4
 
-/* Phase 3 — RS485 / Modbus UART1 */
-#define RICE_GPIO_RS485_TX          GPIO_NUM_15
-#define RICE_GPIO_RS485_RX          GPIO_NUM_16
-#define RICE_GPIO_RS485_DE_RE       GPIO_NUM_26
+/* Phase 3 — onboard RS485 (SP3485, auto DE/RE). ESP UART view:
+ * TX=GPIO16->DI, RX=GPIO15<-RO. Do not claim a DE GPIO. */
+#define RICE_GPIO_RS485_TX          GPIO_NUM_16
+#define RICE_GPIO_RS485_RX          GPIO_NUM_15
 
 /* I2C device addresses */
 #define RICE_I2C_ADDR_IO_EXPANDER   0x24
