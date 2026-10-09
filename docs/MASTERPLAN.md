@@ -110,7 +110,10 @@ SD:  GPIO11 (CMD), GPIO12 (CLK), GPIO13 (D0)
 Demo LED: GPIO6
 ```
 
-RS485 UART, RS485 direction control, door limit inputs, and emergency-stop input must use only remaining free pins.
+RS485 UART and RS485 direction control must use only remaining free pins.
+
+Door travel limits are **not** ESP32 inputs — the linear actuator has internal limit switches.
+Emergency stop is **not** an ESP32 input — it is hard-wired to drop the panel main contactor.
 
 **First firmware document before Modbus or ADS1115 work:** `hardware/wiring/esp32-gpio-map.md`
 
@@ -181,6 +184,8 @@ These resolve contradictions between the design docs so implementation does not 
 | Over-temperature fault | Heater OFF, fan ON |
 | Other critical faults | Heater OFF, elevator OFF |
 | Door on fault | Keep last safe commanded state unless the fault is a door fault |
+| Door position feedback | None to ESP32; actuator internal limit switches end travel |
+| Emergency stop | Electrical only — E-stop kills the main contactor; no ESP32 GPIO |
 | Web API v1 | Read-only monitoring only |
 | Web control | None in v1 |
 | Internet | Not required |
@@ -362,7 +367,7 @@ Acceptance:
 Tasks:
 
 1. Write `hardware/wiring/esp32-gpio-map.md`
-2. Reserve free pins for RS485 UART, DE/RE, door limits, and E-stop
+2. Reserve free pins for RS485 UART and DE/RE only (no door-limit or E-stop GPIOs)
 3. Add TinyRTC on the shared I2C bus
 4. Set and read date/time from the HMI
 
@@ -620,13 +625,14 @@ Sensor disconnected
 RS485 cable disconnected
 ADS1115 I2C failure
 SD card removed
-Door timeout
+Door command timeout
 Elevator stuck-on
-Emergency stop
 Over-temperature
-Power interruption
+Power interruption / E-stop contactor drop (electrical)
 Invalid configuration
 ```
+
+Electrical E-stop is validated on the panel (contactor drop), not as an ESP32 input.
 
 ---
 
@@ -654,7 +660,7 @@ The project is ready for normal operation when:
 [ ] Wiring verified and labeled
 [ ] Electrical protection installed
 [ ] Independent thermal protection installed
-[ ] Emergency stop tested
+[ ] Emergency stop tested electrically (main contactor drop)
 [ ] ADS1115 moisture/EC path validated
 ```
 

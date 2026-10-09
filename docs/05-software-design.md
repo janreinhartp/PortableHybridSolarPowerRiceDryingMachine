@@ -144,10 +144,11 @@ Responsibilities:
 - Monitor actuator faults
 - Monitor communication faults
 - Monitor temperature limits
-- Monitor emergency stop status
 - Prevent unsafe heater operation
 - Force safe actuator states
 - Generate fault conditions
+
+Emergency stop is implemented electrically at the panel main contactor and is not an ESP32 input. After power returns, software must remain in a safe commanded state until the operator confirms restart.
 
 Safety Manager output has priority over normal process commands.
 
@@ -503,11 +504,11 @@ Checks may include:
 - RTC available
 - SD card available
 - No active fault
-- Emergency stop released
-- Door in safe position
+- Control power available after any electrical E-stop / contactor reset
 - Heater initially OFF
 - Elevator initially OFF
 - Fan initially OFF
+- Door relays initially OFF (actuator internal limits handle travel end)
 
 If all required conditions are valid:
 
@@ -902,14 +903,15 @@ R5 != ON
 
 at the same time.
 
-If door position sensors are added, the software should use them to verify:
+Door travel ends on the linear actuator’s internal limit switches. The ESP32 does not receive door-position feedback.
 
-- Fully open
-- Fully closed
-- Moving
-- Unknown position
+Software still must:
 
-A door timeout should generate a fault.
+- Never energize door OPEN and CLOSE relays together
+- Use process timing for discharge sequencing
+- Leave the door relays in a safe commanded state after faults
+
+A door command timeout may still generate a fault when sequencing requires it, even without position feedback.
 
 ---
 
@@ -953,15 +955,17 @@ FAULT is entered when a critical condition occurs.
 Examples:
 
 - Overtemperature
-- Emergency stop
 - Sensor failure
 - Moisture sensor failure
 - Modbus communication failure
 - Elevator timeout
-- Door timeout
+- Door command timeout
 - SD card failure where logging is mandatory
 - Maximum drying time exceeded
 - Invalid actuator state
+- Power loss / recovery requiring operator confirmation
+
+Note: panel emergency stop is electrical (main contactor). Software does not receive an E-stop GPIO; it recovers safely after power returns.
 
 Default safe behavior:
 
@@ -1981,12 +1985,13 @@ Fault ACTIVE
 
 ### Emergency Stop
 
-Expected:
+Emergency stop is electrical (main contactor drop). Expected when power/control returns:
 
 ```text
 Heater OFF
 Elevator OFF
-Fault ACTIVE
+Fan OFF
+Operator confirmation required before batch restart
 ```
 
 ### Moisture Sensor Failure
@@ -2079,7 +2084,7 @@ Possible future features:
 - More advanced moisture estimation
 - Additional temperature sensors
 - Additional EC analysis
-- Door position sensors
+- Optional external door position sensors (not required; actuator has internal limits)
 - Motor feedback
 - Remote monitoring
 - Web-based configuration
