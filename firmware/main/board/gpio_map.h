@@ -3,6 +3,9 @@
 /**
  * Locked GPIO assignments for Waveshare ESP32-S3-Touch-LCD-7B.
  * Keep in sync with hardware/wiring/esp32-gpio-map.md
+ *
+ * Door travel limits are internal to the linear actuator (no ESP32 inputs).
+ * Emergency stop is hard-wired to the panel main contactor (no ESP32 input).
  */
 
 #include "driver/gpio.h"
@@ -23,11 +26,6 @@
 #define RICE_GPIO_RS485_TX          GPIO_NUM_15
 #define RICE_GPIO_RS485_RX          GPIO_NUM_16
 #define RICE_GPIO_RS485_DE_RE       GPIO_NUM_26
-
-/* Phase 4+ — digital safety / door feedback */
-#define RICE_GPIO_DOOR_OPEN_LIMIT   GPIO_NUM_27
-#define RICE_GPIO_DOOR_CLOSE_LIMIT  GPIO_NUM_28
-#define RICE_GPIO_ESTOP             GPIO_NUM_29
 
 /* I2C device addresses */
 #define RICE_I2C_ADDR_IO_EXPANDER   0x24
