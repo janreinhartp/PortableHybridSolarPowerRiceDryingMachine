@@ -16,23 +16,29 @@ static void runtime_status_task(void *arg)
     (void)arg;
     while (true) {
         dryer_controller_refresh_heap(&s_status);
-        ESP_LOGI(TAG, "heap free=%u internal=%u touch_taps=%u sd=%s",
-                 (unsigned)s_status.free_heap,
-                 (unsigned)s_status.free_internal_heap,
-                 s_touch_taps,
-                 s_status.sd_ok ? "ok" : "missing");
+
+        if (s_status.rtc_ok) {
+            ESP_LOGI(TAG, "rtc=%04u-%02u-%02u %02u:%02u:%02u heap=%u taps=%u",
+                     s_status.rtc_year, s_status.rtc_month, s_status.rtc_day,
+                     s_status.rtc_hour, s_status.rtc_minute, s_status.rtc_second,
+                     (unsigned)s_status.free_heap, s_touch_taps);
+        } else {
+            ESP_LOGW(TAG, "rtc=FAIL heap=%u taps=%u sd=%s",
+                     (unsigned)s_status.free_heap, s_touch_taps,
+                     s_status.sd_ok ? "ok" : "missing");
+        }
 
         if (board_hal_lvgl_lock(100)) {
             ui_manager_update_runtime(&s_status, s_touch_taps);
             board_hal_lvgl_unlock();
         }
-        vTaskDelay(pdMS_TO_TICKS(2000));
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
 
 extern "C" void app_main(void)
 {
-    ESP_LOGI(TAG, "Hybrid Solar Power Rice Dryer firmware starting");
+    ESP_LOGI(TAG, "Hybrid Solar Power Rice Dryer firmware starting (Phase 2)");
 
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -54,5 +60,5 @@ extern "C" void app_main(void)
     }
 
     xTaskCreate(runtime_status_task, "runtime_status", 4096, nullptr, 3, nullptr);
-    ESP_LOGI(TAG, "Phase 1 foundation running");
+    ESP_LOGI(TAG, "Phase 2 running");
 }

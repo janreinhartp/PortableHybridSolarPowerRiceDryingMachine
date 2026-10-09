@@ -17,6 +17,7 @@
 #include <stdio.h>          // Standard input/output library
 #include <string.h>         // String manipulation functions
 #include "driver/i2c_master.h"    // ESP32 I2C master driver library
+#include "esp_err.h"
 #include "esp_log.h"        // ESP32 logging library for debugging
 #include "gpio.h"           // GPIO header for pin configuration
 
@@ -47,6 +48,20 @@ typedef struct {
  * @return A handle to the I2C device if initialization is successful, NULL if failure.
  */
 DEV_I2C_Port DEV_I2C_Init();
+
+/**
+ * @brief Return the shared I2C master bus handle (after DEV_I2C_Init).
+ */
+i2c_master_bus_handle_t DEV_I2C_Get_Bus(void);
+
+/**
+ * @brief Add a device on the shared bus at a specific address and clock.
+ *
+ * @param addr 7-bit I2C address
+ * @param scl_speed_hz Device clock (e.g. 100000 for DS1307, 400000 for GT911)
+ * @param dev_handle Output device handle
+ */
+esp_err_t DEV_I2C_Add_Device(uint8_t addr, uint32_t scl_speed_hz, i2c_master_dev_handle_t *dev_handle);
 
 /**
  * @brief Set a new I2C slave address for the device.

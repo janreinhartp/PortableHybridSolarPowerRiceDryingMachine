@@ -35,6 +35,7 @@ DEV_I2C_Port DEV_I2C_Init()
         .scl_io_num = EXAMPLE_I2C_MASTER_SCL,   // I2C SCL (clock) pin
         .sda_io_num = EXAMPLE_I2C_MASTER_SDA,   // I2C SDA (data) pin
         .glitch_ignore_cnt = 7,                  // Ignore glitches in the I2C signal
+        .flags.enable_internal_pullup = true,    // Help cheap TinyRTC modules on 3.3 V
     };
 
     // Create a new I2C master bus with the above configuration
@@ -52,6 +53,35 @@ DEV_I2C_Port DEV_I2C_Init()
     }
 
     return handle;  // Return the device handle if successful
+}
+
+i2c_master_bus_handle_t DEV_I2C_Get_Bus(void)
+{
+    return handle.bus;
+}
+
+esp_err_t DEV_I2C_Add_Device(uint8_t addr, uint32_t scl_speed_hz, i2c_master_dev_handle_t *dev_handle)
+{
+    if (dev_handle == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (handle.bus == NULL) {
+        ESP_LOGE(TAG, "I2C bus not initialized");
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    i2c_device_config_t i2c_dev_conf = {
+        .device_address = addr,
+        .scl_speed_hz = scl_speed_hz,
+    };
+
+    esp_err_t err = i2c_master_bus_add_device(handle.bus, &i2c_dev_conf, dev_handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Add device 0x%02X @ %lu Hz failed: %s",
+                 addr, (unsigned long)scl_speed_hz, esp_err_to_name(err));
+        *dev_handle = NULL;
+    }
+    return err;
 }
 
 /**
