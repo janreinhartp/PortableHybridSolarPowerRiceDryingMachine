@@ -384,11 +384,41 @@ Acceptance:
 
 Tasks:
 
-1. Implement RS485 UART driver with direction control
+1. Implement RS485 UART driver (Waveshare onboard auto-DE: TX16 / RX15)
 2. Implement Modbus RTU with CRC, timeout, and retry
-3. Poll hot-air sensor at address 1
-4. Poll chamber sensor at address 2
-5. Control 8-channel relay at address 10
+3. Control **N4D8B08** relay board (FC03/FC06); product address **10** = DIP **A1+A3 ON** (raw binary; A0 alone → ID 1 for bench)
+4. Poll **XY-MD03** hot-air sensor at address **1**
+5. Poll **XY-MD03** chamber sensor at address **2**
+6. Add **sensor address commissioning** in firmware + HMI (no DIP switches on XY-MD03)
+
+### XY-MD03 temperature/humidity probes
+
+Model: XY-MD03 (PE probe, SHT40), Modbus-RTU over RS485, default **9600 8N1**.
+
+| Item | Value |
+|---|---|
+| Power | DC 5–28 V (Red VCC, Black GND) |
+| Bus | Yellow = A, White = B (+ common GND) |
+| Read T/H | FC **0x04**, start reg **0x0001**, count **2** → temp×10, humidity×10 |
+| Device address register | Holding **0x0101** (FC03 read / FC06 write), range **1–247** |
+| Baud register | Holding **0x0102** (keep **9600**) |
+
+There is **no address DIP**. Both probes usually ship as slave **1**. Address is changed by writing register `0x0101` over Modbus (and must persist after power cycle).
+
+**Commissioning procedure (one sensor on the bus at a time):**
+
+1. Move the relay board off address 1 (N4D8B08 DIP **A1+A3 ON** → address **10**; A0+A3 is 9) so it does not collide.
+2. Connect **only one** XY-MD03 (plus power + A/B/GND).
+3. Use HMI **Sensor Setup**: probe current ID → assign **Hot-air = 1** or **Chamber = 2**.
+4. Power-cycle or wait for the probe to accept the new ID, confirm it answers at the new address.
+5. Disconnect, connect the second probe (still at factory ID 1), assign the other role.
+6. Connect both probes + relay and confirm hot-air @1, chamber @2, relay @10.
+
+Firmware must expose:
+
+- `th_sensor_read(addr)` using XY-MD03 register map
+- `th_sensor_set_address(current_addr, new_addr)` via FC06 → `0x0101`
+- HMI buttons/screen for assign Hot-air / Chamber (and status feedback)
 
 Relay map:
 
@@ -404,10 +434,12 @@ Relay map:
 Acceptance:
 
 ```text
-[ ] Both temperature/humidity sensors respond
+[ ] Both temperature/humidity sensors respond at unique addresses
+[ ] Sensor address can be set from HMI (or serial) without DIP switches
 [ ] CRC and timeout work
 [ ] All required relays toggle correctly
 [ ] R4 and R5 are never both ON
+[ ] Relay at 10 does not collide with sensors at 1 and 2
 ```
 
 ## Phase 4 — ADS1115, Sensors, and Actuators

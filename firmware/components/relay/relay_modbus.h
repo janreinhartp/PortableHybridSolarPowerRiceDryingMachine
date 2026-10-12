@@ -9,13 +9,26 @@
 extern "C" {
 #endif
 
-/** Planned product address (set board DIP/dial to this when T/H sensors use 1 & 2). */
-#define RELAY_MODBUS_ADDR       10
-#define RELAY_COIL_ELEVATOR     0  /* R1 */
-#define RELAY_COIL_HEATER       1  /* R2 */
-#define RELAY_COIL_FAN          2  /* R3 */
-#define RELAY_COIL_DOOR_OPEN    3  /* R4 */
-#define RELAY_COIL_DOOR_CLOSE   4  /* R5 */
+/**
+ * Eletechsup N4D8B08 (FC03/FC06 holding registers).
+ * DIP A0–A5 = raw binary address (A0=1, A1=2, A2=4, A3=8, A4=16, A5=32).
+ * Factory: A0 ON → ID 1. Product: A1+A3 ON → ID 10 (sensors use 1 and 2).
+ */
+#define RELAY_MODBUS_ADDR       1
+
+/* Channel registers are 1-based (0x0001–0x0008). */
+#define RELAY_CH_ELEVATOR       1  /* R1 */
+#define RELAY_CH_HEATER         2  /* R2 */
+#define RELAY_CH_FAN            3  /* R3 */
+#define RELAY_CH_DOOR_OPEN      4  /* R4 */
+#define RELAY_CH_DOOR_CLOSE     5  /* R5 */
+
+/* Legacy aliases used by older call sites / comments. */
+#define RELAY_COIL_ELEVATOR     RELAY_CH_ELEVATOR
+#define RELAY_COIL_HEATER       RELAY_CH_HEATER
+#define RELAY_COIL_FAN          RELAY_CH_FAN
+#define RELAY_COIL_DOOR_OPEN    RELAY_CH_DOOR_OPEN
+#define RELAY_COIL_DOOR_CLOSE   RELAY_CH_DOOR_CLOSE
 
 typedef struct {
     bool online;
@@ -27,7 +40,7 @@ typedef struct {
 } relay_state_t;
 
 esp_err_t relay_modbus_init(void);
-/** Discovered Modbus slave ID, or 0 if not found yet. */
+/** Active Modbus slave ID, or 0 if not found yet. */
 uint8_t relay_modbus_address(void);
 esp_err_t relay_modbus_refresh(relay_state_t *out_state);
 esp_err_t relay_modbus_set_elevator(bool on);

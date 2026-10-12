@@ -7,7 +7,7 @@
 
 static const char *TAG = "modbus";
 
-#define MODBUS_TIMEOUT_MS   150
+#define MODBUS_TIMEOUT_MS   300
 #define MODBUS_RETRIES      2
 
 static uint16_t modbus_crc16(const uint8_t *data, size_t len)
@@ -49,7 +49,11 @@ static esp_err_t modbus_transaction(const uint8_t *req, size_t req_len,
         uint16_t rx_crc = (uint16_t)(resp[got - 2] | (resp[got - 1] << 8));
         uint16_t calc = modbus_crc16(resp, got - 2);
         if (rx_crc != calc) {
-            ESP_LOGW(TAG, "CRC mismatch slave=%u (rx=%04X calc=%04X)", req[0], rx_crc, calc);
+            ESP_LOGW(TAG, "CRC mismatch slave=%u (rx=%04X calc=%04X len=%u)", req[0], rx_crc, calc,
+                     (unsigned)got);
+            if (got >= 4) {
+                ESP_LOGW(TAG, "  rx: %02X %02X %02X %02X ...", resp[0], resp[1], resp[2], resp[3]);
+            }
             last = ESP_ERR_INVALID_CRC;
             continue;
         }
@@ -145,6 +149,31 @@ esp_err_t modbus_write_single_coil(uint8_t slave, uint16_t coil_addr, bool coil_
     uint8_t resp[8];
     size_t resp_len = 0;
     esp_err_t err = modbus_transaction(req, sizeof(req), resp, sizeof(resp), &resp_len, 0x05);
+    if (err != ESP_OK) {
+        return err;
+    }
+    if (resp_len < 8) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+    return ESP_OK;
+}
+
+esp_err_t modbus_write_single_reg(uint8_t slave, uint16_t reg_addr, uint16_t value)
+{
+    uint8_t req[8];
+    req[0] = slave;
+    req[1] = 0x06;
+    req[2] = (uint8_t)(reg_addr >> 8);
+    req[3] = (uint8_t)(reg_addr & 0xFF);
+    req[4] = (uint8_t)(value >> 8);
+    req[5] = (uint8_t)(value & 0xFF);
+    uint16_t crc = modbus_crc16(req, 6);
+    req[6] = (uint8_t)(crc & 0xFF);
+    req[7] = (uint8_t)(crc >> 8);
+
+    uint8_t resp[8];
+    size_t resp_len = 0;
+    esp_err_t err = modbus_transaction(req, sizeof(req), resp, sizeof(resp), &resp_len, 0x06);
     if (err != ESP_OK) {
         return err;
     }

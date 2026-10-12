@@ -25,6 +25,9 @@ esp_err_t modbus_read_input_regs(uint8_t slave, uint16_t start_addr,
 /** Write single coil (FC 0x05). coil_on true = 0xFF00. */
 esp_err_t modbus_write_single_coil(uint8_t slave, uint16_t coil_addr, bool coil_on);
 
+/** Write single holding register (FC 0x06). */
+esp_err_t modbus_write_single_reg(uint8_t slave, uint16_t reg_addr, uint16_t value);
+
 /** Read coils (FC 0x01), up to 16 coils packed into out_bits LSB-first. */
 esp_err_t modbus_read_coils(uint8_t slave, uint16_t start_addr,
                             uint16_t count, uint16_t *out_bits);

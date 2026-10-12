@@ -95,12 +95,37 @@ UART for Modbus/RS485: **UART1** at **9600 8N1**.
 
 | Modbus addr | Device |
 |------------:|--------|
-| 1 | Hot-air temperature/humidity |
-| 2 | Chamber temperature/humidity |
-| 10 | 8-channel relay board |
+| 1 | **XY-MD03 hot-air** T/H (no DIP — set via Modbus reg `0x0101`) |
+| 2 | **XY-MD03 chamber** T/H (no DIP — set via Modbus reg `0x0101`) |
+| 10 | **N4D8B08 relay** (move DIP here before commissioning sensors) |
 
-Default T/H register map (confirm with sensor datasheet): humidity×10 at reg 0, temperature×10 at reg 1 (FC04 then FC03 fallback).
-Relay coils: R1=0 … R8=7 (FC05 write, FC01 read). R4/R5 must never both be ON.
+### XY-MD03 T/H probes (no DIP switches)
+
+| Topic | Value |
+|--------|--------|
+| Wires | Red VCC (5–28 V), Black GND, Yellow A, White B |
+| Baud | 9600 8N1 |
+| Read T/H | FC04 start **0x0001** count 2 → temp×10, humidity×10 |
+| Set address | FC06 write holding **0x0101** = new ID (1–247) |
+
+Factory address is usually **1**. Commission **one probe at a time** (relay must already be at **10**):
+
+1. Connect only one probe → HMI **→Hotair(1)** or **→Chamber(2)**
+2. Power-cycle the probe and confirm it answers at the new ID
+3. Repeat for the second probe
+
+### Eletechsup N4D8B08 relay (locked for this project)
+
+| Topic | Requirement |
+|--------|-------------|
+| Power | **12 V DC** on relay board — RS485 alone does not power the module |
+| Bus | **A↔A, B↔B**, **GND↔GND** between Waveshare RS485 header and relay |
+| Baud | **9600 8N1** (manual default) |
+| Address | DIP **A0–A5** raw binary (A0=1, A1=2, A2=4, A3=8). Product target **10** = **A1+A3 ON**. (A0+A3 = 9 — wrong for product ID 10.) |
+| Protocol | FC **0x06** write / FC **0x03** read holding regs; channels **0x0001–0x0008**; Close all = reg `0x0000` value `0x0800` |
+| Open / Close | Value `0x0100` open, `0x0200` close (matches N4D8B08 command PDF) |
+
+Relay channels: R1=1 … R5=5. R4/R5 must never both be ON.
 
 ---
 

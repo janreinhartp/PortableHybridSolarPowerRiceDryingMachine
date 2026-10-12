@@ -5,62 +5,95 @@
 
 static const char *TAG = "relay";
 static relay_state_t s_state;
-/* 0 = not discovered yet. R4D8A08 with all address DIPs OFF is usually ID 1. */
 static uint8_t s_addr;
 
-static esp_err_t set_coil(uint16_t coil, bool on)
+/* N4D8B08 FC06 command words: high byte = cmd, low byte = delay. */
+#define N4D_CMD_OPEN        0x0100
+#define N4D_CMD_CLOSE       0x0200
+#define N4D_CMD_CLOSE_ALL   0x0800
+#define N4D_REG_ALL         0x0000
+#define N4D_REG_CH1         0x0001
+#define N4D_STATUS_ON       0x0001
+
+static esp_err_t channel_cmd(uint16_t channel, uint16_t cmd)
 {
     if (s_addr == 0) {
         return ESP_ERR_INVALID_STATE;
     }
-    esp_err_t err = modbus_write_single_coil(s_addr, coil, on);
+    esp_err_t err = modbus_write_single_reg(s_addr, channel, cmd);
     if (err != ESP_OK) {
         s_state.online = false;
-        ESP_LOGW(TAG, "coil %u -> %d failed: %s", coil, (int)on, esp_err_to_name(err));
+        ESP_LOGW(TAG, "ch %u cmd 0x%04X failed: %s", channel, cmd, esp_err_to_name(err));
     }
     return err;
 }
 
-static esp_err_t try_read_coils(uint8_t addr, uint16_t *bits)
+static esp_err_t set_channel(uint16_t channel, bool on)
 {
-    return modbus_read_coils(addr, 0, 8, bits);
+    return channel_cmd(channel, on ? N4D_CMD_OPEN : N4D_CMD_CLOSE);
 }
 
-static esp_err_t discover_addr(uint16_t *bits)
+static esp_err_t read_channels(uint8_t addr, uint16_t *regs8)
 {
-    /* All address DIPs OFF on R4D8A08 → Modbus ID 1. Product target is 10. */
-    static const uint8_t k_candidates[] = {1, RELAY_MODBUS_ADDR};
+    return modbus_read_holding_regs(addr, N4D_REG_CH1, 8, regs8);
+}
 
+static esp_err_t try_probe_addr(uint8_t addr, uint16_t *regs8)
+{
+    /* Prefer a safe Close-all, then read status. */
+    esp_err_t err = modbus_write_single_reg(addr, N4D_REG_ALL, N4D_CMD_CLOSE_ALL);
+    if (err == ESP_OK) {
+        if (regs8 != NULL && read_channels(addr, regs8) != ESP_OK) {
+            for (int i = 0; i < 8; ++i) {
+                regs8[i] = 0;
+            }
+        }
+        return ESP_OK;
+    }
+    return read_channels(addr, regs8);
+}
+
+static esp_err_t discover_addr(uint16_t *regs8)
+{
     if (s_addr != 0) {
-        esp_err_t err = try_read_coils(s_addr, bits);
+        esp_err_t err = read_channels(s_addr, regs8);
         if (err == ESP_OK) {
             return ESP_OK;
         }
-        ESP_LOGW(TAG, "lost relay at addr %u — re-scanning", s_addr);
+        ESP_LOGW(TAG, "lost relay at addr %u — re-probing", s_addr);
         s_addr = 0;
     }
 
+    /*
+     * DIP A0–A5 are raw binary (A0=1 … A3=8).
+     * A0 ON → 1 (factory). A1+A3 → 10 (product). A0+A3 → 9 (common mis-set).
+     */
+    static const uint8_t k_candidates[] = {RELAY_MODBUS_ADDR, 10, 9};
     for (size_t i = 0; i < sizeof(k_candidates); ++i) {
-        uint8_t addr = k_candidates[i];
-        if (i > 0 && addr == k_candidates[0]) {
-            continue;
-        }
-        esp_err_t err = try_read_coils(addr, bits);
+        esp_err_t err = try_probe_addr(k_candidates[i], regs8);
         if (err == ESP_OK) {
-            s_addr = addr;
-            ESP_LOGI(TAG, "Relay board found at Modbus addr %u", s_addr);
+            s_addr = k_candidates[i];
+            ESP_LOGI(TAG, "N4D8B08 found at Modbus addr %u (FC03/06)", s_addr);
             return ESP_OK;
         }
     }
     return ESP_ERR_NOT_FOUND;
 }
 
+static void apply_regs(const uint16_t *regs8)
+{
+    s_state.elevator = (regs8[RELAY_CH_ELEVATOR - 1] == N4D_STATUS_ON);
+    s_state.heater = (regs8[RELAY_CH_HEATER - 1] == N4D_STATUS_ON);
+    s_state.fan = (regs8[RELAY_CH_FAN - 1] == N4D_STATUS_ON);
+    s_state.door_open = (regs8[RELAY_CH_DOOR_OPEN - 1] == N4D_STATUS_ON);
+    s_state.door_close = (regs8[RELAY_CH_DOOR_CLOSE - 1] == N4D_STATUS_ON);
+}
+
 esp_err_t relay_modbus_init(void)
 {
-    /* Probe deferred to runtime — avoids boot WDT when the bus is empty. */
     s_state = (relay_state_t){0};
     s_addr = 0;
-    ESP_LOGI(TAG, "Relay driver ready (will probe addr 1 / %u)", RELAY_MODBUS_ADDR);
+    ESP_LOGI(TAG, "N4D8B08 driver ready (expect DIP A0=ON → addr %u)", RELAY_MODBUS_ADDR);
     return ESP_OK;
 }
 
@@ -71,8 +104,8 @@ uint8_t relay_modbus_address(void)
 
 esp_err_t relay_modbus_refresh(relay_state_t *out_state)
 {
-    uint16_t bits = 0;
-    esp_err_t err = discover_addr(&bits);
+    uint16_t regs[8] = {0};
+    esp_err_t err = discover_addr(regs);
     if (err != ESP_OK) {
         s_state.online = false;
         if (out_state) {
@@ -82,17 +115,12 @@ esp_err_t relay_modbus_refresh(relay_state_t *out_state)
     }
 
     s_state.online = true;
-    s_state.elevator = (bits & (1u << RELAY_COIL_ELEVATOR)) != 0;
-    s_state.heater = (bits & (1u << RELAY_COIL_HEATER)) != 0;
-    s_state.fan = (bits & (1u << RELAY_COIL_FAN)) != 0;
-    s_state.door_open = (bits & (1u << RELAY_COIL_DOOR_OPEN)) != 0;
-    s_state.door_close = (bits & (1u << RELAY_COIL_DOOR_CLOSE)) != 0;
+    apply_regs(regs);
 
-    /* Enforce mutual exclusion if board reports both. */
     if (s_state.door_open && s_state.door_close) {
         ESP_LOGE(TAG, "R4 and R5 both ON — forcing both OFF");
-        set_coil(RELAY_COIL_DOOR_OPEN, false);
-        set_coil(RELAY_COIL_DOOR_CLOSE, false);
+        set_channel(RELAY_CH_DOOR_OPEN, false);
+        set_channel(RELAY_CH_DOOR_CLOSE, false);
         s_state.door_open = false;
         s_state.door_close = false;
     }
@@ -105,7 +133,7 @@ esp_err_t relay_modbus_refresh(relay_state_t *out_state)
 
 esp_err_t relay_modbus_set_elevator(bool on)
 {
-    esp_err_t err = set_coil(RELAY_COIL_ELEVATOR, on);
+    esp_err_t err = set_channel(RELAY_CH_ELEVATOR, on);
     if (err == ESP_OK) {
         s_state.elevator = on;
         s_state.online = true;
@@ -115,7 +143,7 @@ esp_err_t relay_modbus_set_elevator(bool on)
 
 esp_err_t relay_modbus_set_heater(bool on)
 {
-    esp_err_t err = set_coil(RELAY_COIL_HEATER, on);
+    esp_err_t err = set_channel(RELAY_CH_HEATER, on);
     if (err == ESP_OK) {
         s_state.heater = on;
         s_state.online = true;
@@ -125,7 +153,7 @@ esp_err_t relay_modbus_set_heater(bool on)
 
 esp_err_t relay_modbus_set_fan(bool on)
 {
-    esp_err_t err = set_coil(RELAY_COIL_FAN, on);
+    esp_err_t err = set_channel(RELAY_CH_FAN, on);
     if (err == ESP_OK) {
         s_state.fan = on;
         s_state.online = true;
@@ -135,12 +163,12 @@ esp_err_t relay_modbus_set_fan(bool on)
 
 esp_err_t relay_modbus_open_door(void)
 {
-    esp_err_t err = set_coil(RELAY_COIL_DOOR_CLOSE, false);
+    esp_err_t err = set_channel(RELAY_CH_DOOR_CLOSE, false);
     if (err != ESP_OK) {
         return err;
     }
     s_state.door_close = false;
-    err = set_coil(RELAY_COIL_DOOR_OPEN, true);
+    err = set_channel(RELAY_CH_DOOR_OPEN, true);
     if (err == ESP_OK) {
         s_state.door_open = true;
         s_state.online = true;
@@ -150,12 +178,12 @@ esp_err_t relay_modbus_open_door(void)
 
 esp_err_t relay_modbus_close_door(void)
 {
-    esp_err_t err = set_coil(RELAY_COIL_DOOR_OPEN, false);
+    esp_err_t err = set_channel(RELAY_CH_DOOR_OPEN, false);
     if (err != ESP_OK) {
         return err;
     }
     s_state.door_open = false;
-    err = set_coil(RELAY_COIL_DOOR_CLOSE, true);
+    err = set_channel(RELAY_CH_DOOR_CLOSE, true);
     if (err == ESP_OK) {
         s_state.door_close = true;
         s_state.online = true;
@@ -165,8 +193,8 @@ esp_err_t relay_modbus_close_door(void)
 
 esp_err_t relay_modbus_stop_door(void)
 {
-    esp_err_t e1 = set_coil(RELAY_COIL_DOOR_OPEN, false);
-    esp_err_t e2 = set_coil(RELAY_COIL_DOOR_CLOSE, false);
+    esp_err_t e1 = set_channel(RELAY_CH_DOOR_OPEN, false);
+    esp_err_t e2 = set_channel(RELAY_CH_DOOR_CLOSE, false);
     if (e1 == ESP_OK && e2 == ESP_OK) {
         s_state.door_open = false;
         s_state.door_close = false;
@@ -179,19 +207,21 @@ esp_err_t relay_modbus_stop_door(void)
 esp_err_t relay_modbus_all_off(void)
 {
     if (s_addr == 0) {
-        uint16_t bits = 0;
-        if (discover_addr(&bits) != ESP_OK) {
+        uint16_t regs[8] = {0};
+        if (discover_addr(regs) != ESP_OK) {
             s_state.online = false;
             return ESP_ERR_NOT_FOUND;
         }
     }
 
-    esp_err_t last = ESP_OK;
-    for (uint16_t coil = 0; coil < 8; ++coil) {
-        esp_err_t err = set_coil(coil, false);
-        if (err != ESP_OK) {
-            last = err;
-            break;
+    esp_err_t last = channel_cmd(N4D_REG_ALL, N4D_CMD_CLOSE_ALL);
+    if (last != ESP_OK) {
+        for (uint16_t ch = 1; ch <= 8; ++ch) {
+            esp_err_t err = set_channel(ch, false);
+            if (err != ESP_OK) {
+                last = err;
+                break;
+            }
         }
     }
     s_state.elevator = false;

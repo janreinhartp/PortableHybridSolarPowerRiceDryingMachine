@@ -3,13 +3,18 @@
 #include <cstdio>
 #include <cstring>
 
+#include "esp_log.h"
 #include "lvgl.h"
 #include "relay_modbus.h"
+#include "th_sensor.h"
+
+static const char *TAG_UI = "ui";
 
 static lv_obj_t *s_status_box = nullptr;
 static lv_obj_t *s_sensor_label = nullptr;
 static lv_obj_t *s_relay_label = nullptr;
 static lv_obj_t *s_rtc_label = nullptr;
+static lv_obj_t *s_setup_label = nullptr;
 static unsigned *s_tap_counter = nullptr;
 
 static const char *ok_fail(bool ok)
@@ -93,6 +98,72 @@ static void on_all_off(lv_event_t *e)
     relay_modbus_all_off();
 }
 
+static void set_setup_msg(const char *msg)
+{
+    if (s_setup_label != nullptr) {
+        lv_label_set_text(s_setup_label, msg);
+    }
+    ESP_LOGI(TAG_UI, "%s", msg);
+}
+
+/**
+ * Assign a factory-default XY-MD03 (usually still at ID 1) to a product role.
+ * Connect only ONE probe. Relay should already be moved off address 1 (DIP=10).
+ */
+static void assign_sensor_role(uint8_t new_addr, const char *role)
+{
+    static const uint8_t k_try[] = {1, 2, 3, 4, 5, 8, 10};
+    uint8_t found = 0;
+    th_reading_t reading {};
+
+    for (size_t i = 0; i < sizeof(k_try); ++i) {
+        if (th_sensor_read(k_try[i], &reading) == ESP_OK) {
+            found = k_try[i];
+            break;
+        }
+    }
+
+    if (found == 0) {
+        set_setup_msg("Sensor setup: no XY-MD03 answering (wire ONE probe only)");
+        return;
+    }
+
+    if (found == new_addr) {
+        char buf[96];
+        snprintf(buf, sizeof(buf), "Sensor setup: already %s @%u (%.1fC)", role, found,
+                 reading.temperature_c);
+        set_setup_msg(buf);
+        return;
+    }
+
+    esp_err_t err = th_sensor_set_address(found, new_addr);
+    char buf[128];
+    if (err == ESP_OK) {
+        snprintf(buf, sizeof(buf),
+                 "Sensor setup: %s wrote %u→%u OK — power-cycle probe", role, found, new_addr);
+    } else {
+        snprintf(buf, sizeof(buf), "Sensor setup: %s %u→%u FAILED (%s)", role, found, new_addr,
+                 esp_err_to_name(err));
+    }
+    set_setup_msg(buf);
+}
+
+static void on_assign_hotair(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
+        return;
+    }
+    assign_sensor_role(TH_SENSOR_HOTAIR_ADDR, "Hot-air");
+}
+
+static void on_assign_chamber(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
+        return;
+    }
+    assign_sensor_role(TH_SENSOR_CHAMBER_ADDR, "Chamber");
+}
+
 static lv_obj_t *make_btn(lv_obj_t *parent, const char *text, lv_event_cb_t cb, lv_coord_t w)
 {
     lv_obj_t *btn = lv_btn_create(parent);
@@ -143,6 +214,13 @@ void ui_manager_show_foundation_screen(const system_status_t *status)
     lv_obj_set_style_text_font(s_rtc_label, &lv_font_montserrat_14, 0);
     lv_obj_align(s_rtc_label, LV_ALIGN_TOP_LEFT, 32, 300);
 
+    s_setup_label = lv_label_create(scr);
+    lv_obj_set_style_text_color(s_setup_label, lv_color_hex(0xF2A65A), 0);
+    lv_obj_set_style_text_font(s_setup_label, &lv_font_montserrat_14, 0);
+    lv_obj_align(s_setup_label, LV_ALIGN_TOP_LEFT, 32, 340);
+    lv_label_set_text(s_setup_label,
+                      "Sensor setup: move relay DIP to 10, wire ONE XY-MD03, then assign");
+
     /* Row 1 */
     lv_obj_t *b1 = make_btn(scr, "Fan", on_fan_toggle, 120);
     lv_obj_align(b1, LV_ALIGN_BOTTOM_LEFT, 24, -84);
@@ -155,13 +233,17 @@ void ui_manager_show_foundation_screen(const system_status_t *status)
     lv_obj_t *b5 = make_btn(scr, "Touch+", on_tap_btn, 110);
     lv_obj_align(b5, LV_ALIGN_BOTTOM_LEFT, 570, -84);
 
-    /* Row 2 door */
-    lv_obj_t *d1 = make_btn(scr, "Door OPEN", on_door_open, 150);
+    /* Row 2 door + sensor address commissioning */
+    lv_obj_t *d1 = make_btn(scr, "Door OPEN", on_door_open, 140);
     lv_obj_align(d1, LV_ALIGN_BOTTOM_LEFT, 24, -24);
-    lv_obj_t *d2 = make_btn(scr, "Door CLOSE", on_door_close, 150);
-    lv_obj_align(d2, LV_ALIGN_BOTTOM_LEFT, 188, -24);
-    lv_obj_t *d3 = make_btn(scr, "Door STOP", on_door_stop, 140);
-    lv_obj_align(d3, LV_ALIGN_BOTTOM_LEFT, 352, -24);
+    lv_obj_t *d2 = make_btn(scr, "Door CLOSE", on_door_close, 140);
+    lv_obj_align(d2, LV_ALIGN_BOTTOM_LEFT, 176, -24);
+    lv_obj_t *d3 = make_btn(scr, "Door STOP", on_door_stop, 130);
+    lv_obj_align(d3, LV_ALIGN_BOTTOM_LEFT, 328, -24);
+    lv_obj_t *s1 = make_btn(scr, "->Hotair(1)", on_assign_hotair, 150);
+    lv_obj_align(s1, LV_ALIGN_BOTTOM_LEFT, 472, -24);
+    lv_obj_t *s2 = make_btn(scr, "->Chamber(2)", on_assign_chamber, 160);
+    lv_obj_align(s2, LV_ALIGN_BOTTOM_LEFT, 636, -24);
 
     ui_manager_update_runtime(status, 0);
 }

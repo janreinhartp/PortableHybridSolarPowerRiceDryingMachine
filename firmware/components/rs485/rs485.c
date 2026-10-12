@@ -82,11 +82,13 @@ esp_err_t rs485_transceive(const uint8_t *tx, size_t tx_len,
 
     *rx_len = 0;
     uart_flush_input(RS485_UART_NUM);
+    /* Modbus RTU inter-frame gap (~3.5 chars @ 9600 ≈ 4 ms). */
+    vTaskDelay(pdMS_TO_TICKS(4));
 
     int written = uart_write_bytes(RS485_UART_NUM, tx, tx_len);
     uart_wait_tx_done(RS485_UART_NUM, pdMS_TO_TICKS(100));
-    /* Allow auto-DE turnaround before listening. */
-    vTaskDelay(1);
+    /* Allow onboard auto-DE transceiver turnaround before listening. */
+    vTaskDelay(pdMS_TO_TICKS(4));
 
     if (written != (int)tx_len) {
         xSemaphoreGive(s_bus_mutex);
