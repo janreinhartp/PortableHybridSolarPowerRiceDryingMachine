@@ -439,31 +439,22 @@ The fan shall remain ON while the heater cycles during DRYING.
 
 ## 18.1 Temperature and Humidity Sensors
 
-Two RS485 Modbus RTU temperature/humidity sensors shall be supported.
+Two **XY-MD03** RS485 Modbus RTU temperature/humidity probes shall be supported.
 
-Suggested assignments:
-
-```text
-Sensor 1 = Hot-Air Temperature/Humidity
-Sensor 2 = Drying Chamber Temperature/Humidity
-```
-
-Each sensor shall have a unique Modbus address.
-
-Example:
+Assignments:
 
 ```text
-Sensor 1 = Address 1
-Sensor 2 = Address 2
+Sensor 1 = Hot-Air Temperature/Humidity = Address 1
+Sensor 2 = Drying Chamber Temperature/Humidity = Address 2
 ```
 
-The final addresses shall be configurable.
+Each probe shall have a unique Modbus address. There is no DIP switch. Firmware sets the address by writing holding register `0x0101`, one probe at a time.
 
 ---
 
 # 19. RS485 Modbus Requirements
 
-The RS485 bus shall support:
+The RS485 bus shall support Modbus RTU at **9600 8N1** on the Waveshare onboard transceiver (UART1, GPIO16 TX, GPIO15 RX, automatic direction control):
 
 - Modbus RTU
 - CRC validation
@@ -516,15 +507,15 @@ ESP32-S3
 
 All devices shall have unique Modbus addresses.
 
-Example:
+Locked map:
 
 ```text
-01 = Hot-Air Sensor
-02 = Chamber Sensor
-10 = Relay Controller
+01 = XY-MD03 hot-air
+02 = XY-MD03 chamber
+10 = N4D8B08 relay (DIP A1+A3 ON)
 ```
 
-The final addresses shall be configurable.
+Probe addresses are commissioned over Modbus. The relay address is set with the DIP switches and must stay off 1 and 2.
 
 ---
 

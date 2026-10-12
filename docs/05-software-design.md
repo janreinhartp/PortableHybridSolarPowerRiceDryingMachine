@@ -277,6 +277,24 @@ The software should support:
 
 The system must not block the main process controller while waiting for a Modbus response.
 
+Locked fieldbus (implemented in Phase 3 firmware):
+
+| Addr | Device | Notes |
+|---:|---|---|
+| 1 | XY-MD03 hot-air | No DIP. Address holding register `0x0101` |
+| 2 | XY-MD03 chamber | Same register map |
+| 10 | N4D8B08 relay | DIP A1+A3 ON. FC03/FC06 holding registers |
+
+Bus settings: UART1, GPIO16 TX / GPIO15 RX, onboard auto-DE, **9600 8N1**.
+
+XY-MD03 read: function **0x04**, start register **0x0001**, count 2 (temperature ×10, humidity ×10).
+
+N4D8B08 channel registers **0x0001–0x0008**. Command words: open `0x0100`, close `0x0200`, close-all on register `0x0000` = `0x0800`.
+
+Relay map: R1 elevator, R2 heater, R3 fan, R4 door open, R5 door close. R4 and R5 must never both be ON.
+
+Phase 4 replaces direct HMI writes to the relay driver with the Actuator Manager.
+
 ---
 
 # 6. Analog Moisture and EC Interface

@@ -25,7 +25,9 @@ System Architecture       COMPLETE
 Hardware Design           COMPLETE
 Software Design           COMPLETE
 Implementation Plan       COMPLETE
-Firmware Development      NOT STARTED
+Firmware Phases 0–3       IN TREE
+Phase 3 fieldbus bench    DEFERRED until probes and relay are wired
+Firmware Phase 4          NEXT
 Hardware Integration      NOT STARTED
 Dry Run                   NOT STARTED
 Rice Validation           NOT STARTED
@@ -34,19 +36,18 @@ Rice Validation           NOT STARTED
 What exists today:
 
 - Design docs under `docs/01` through `docs/06`, summarized in [README.md](../README.md)
-- Waveshare board demo at [ESP32-S3-Touch-LCD-7B-Demo/15_LVGL_SLIDER](ESP32-S3-Touch-LCD-7B-Demo/15_LVGL_SLIDER)
+- Waveshare board demo at [ESP32-S3-Touch-LCD-7B-Demo/15_LVGL_SLIDER](ESP32-S3-Touch-LCD-7B-Demo/15_LVGL_SLIDER), kept as a board reference
+- Product firmware under `firmware/` through Phase 3: board bring-up, TinyRTC, RS485/Modbus, XY-MD03 commissioning, N4D8B08 relay driver, and a bring-up HMI
+- GPIO and fieldbus map at [hardware/wiring/esp32-gpio-map.md](../hardware/wiring/esp32-gpio-map.md)
+- Placeholder folders for schematics, PCB, mechanical, calibration data, test results, and tests
 
-What does not exist yet:
-
-- `firmware/` project
-- `hardware/` drawings and wiring maps
-- `tests/` and `data/test-results/`
+Next implementation step: **Phase 4 — ADS1115, moisture/EC, and Actuator Manager.**
 
 ---
 
 # 2. Waveshare Demo Review
 
-The only executable code is the Waveshare ESP-IDF demo `15_LVGL_SLIDER`.
+The Waveshare ESP-IDF demo `15_LVGL_SLIDER` remains the board reference. Product firmware lives in `firmware/`.
 
 | Item | Value |
 |---|---|
@@ -316,7 +317,7 @@ IDLE -> PRECHECK -> DRYING -> COOLING -> DISCHARGING -> COMPLETE
 
 # 8. Build Order
 
-Each phase must pass its acceptance checks on hardware before the next phase starts. Keep heater power disconnected until Phase 5 safety tests pass.
+Phases 0–3 firmware is in the tree. Phase 3 fieldbus bench checks stay open until the XY-MD03 probes and the N4D8B08 relay are wired. Phase 4 firmware starts before that bench. Keep heater power disconnected until Phase 5 safety tests pass.
 
 ## Phase 0 — Repository Skeleton
 
@@ -331,12 +332,14 @@ data/test-results/
 tests/
 ```
 
+Status: folders, the untouched Waveshare demo, and the README link to this plan are in the repository.
+
 Acceptance:
 
 ```text
-[ ] Folders exist
-[ ] Demo remains unmodified under docs/
-[ ] README points to this master plan
+[x] Folders exist
+[x] Demo remains unmodified under docs/
+[x] README points to this master plan
 ```
 
 ## Phase 1 — Foundation
@@ -350,6 +353,8 @@ Tasks:
 3. Boot a simple status screen
 4. Confirm touch, backlight, and `/sdcard`
 5. Log free heap over serial
+
+Status: firmware is in the tree (`firmware/` ESP-IDF project, copied Waveshare drivers, status HMI). Board acceptance below is still a hardware check.
 
 Acceptance:
 
@@ -371,10 +376,12 @@ Tasks:
 3. Add TinyRTC on the shared I2C bus
 4. Set and read date/time from the HMI
 
+Status: `hardware/wiring/esp32-gpio-map.md` and the TinyRTC driver are in the tree. RTC read/write on the shared bus is still a hardware check.
+
 Acceptance:
 
 ```text
-[ ] GPIO map documents every used and free pin
+[x] GPIO map documents every used and free pin
 [ ] RTC reads and writes time
 [ ] RTC failure is detected
 [ ] No I2C address collision with GT911 or IO expander
@@ -419,6 +426,14 @@ Firmware must expose:
 - `th_sensor_read(addr)` using XY-MD03 register map
 - `th_sensor_set_address(current_addr, new_addr)` via FC06 → `0x0101`
 - HMI buttons/screen for assign Hot-air / Chamber (and status feedback)
+
+Status: firmware is in the tree (`rs485`, `modbus_rtu`, `th_sensor`, `relay_modbus`, HMI sensor setup and manual relay buttons). Bench acceptance stays open until both probes and the relay are on the bus. Phase 4 starts before that bench.
+
+Deferred until the bus is wired:
+
+- Sensor setup must assign a lone factory-default probe. With another unit already answering, the first successful read can be rewritten to the new role.
+- Door OPEN/CLOSE/STOP should discover the relay the same way fan, elevator, and heater do, so a command is not dropped while the address is still unknown.
+- All-off must keep the last known coil state when the Modbus write fails.
 
 Relay map:
 
@@ -737,11 +752,14 @@ The project is ready for normal operation when:
 
 # 13. Immediate Next Step
 
-Start Phase 0 and Phase 1:
+Start **Phase 4**:
 
-1. Create the `firmware/` ESP-IDF project skeleton
-2. Copy the Waveshare board bring-up components
-3. Boot display, touch, LVGL, and SD
-4. Write the GPIO map before adding RS485 or ADS1115
+1. Implement the ADS1115 driver on the shared I2C bus (address `0x48` unless the ADDR pin says otherwise)
+2. Read moisture and EC channels and keep 0–5 V off every ESP32 pin
+3. Store linear calibration in NVS
+4. Publish one validated sensor snapshot
+5. Make Actuator Manager the only relay writer, and move the bring-up HMI relay buttons behind it
+6. Add the Manual Control screen for fan, elevator, and door
+7. Test the heater output only into the SSR/contactor control input
 
-Do not connect the high-power heater until Phase 5 safety tests pass.
+Phase 3 bus checks (unique XY-MD03 addresses, relay at 10, R4/R5 interlock on hardware) run when those devices are wired. Do not connect the high-power heater until Phase 5 safety tests pass.

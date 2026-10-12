@@ -168,4 +168,4 @@ Door motion stops at the actuator’s internal limits. Software must still:
 
 ## 8. Change control
 
-Update this file and `firmware/main/board/gpio_map.h` together. Do not start RS485 or ADS1115 work until this map matches the wired hardware.
+Update this file and `firmware/main/board/gpio_map.h` together. RS485/Modbus firmware follows this map. Phase 4 ADS1115 work uses I2C address `0x48` on the same bus and must keep this map matched to the wired hardware.
