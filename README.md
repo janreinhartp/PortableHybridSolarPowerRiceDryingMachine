@@ -898,15 +898,15 @@ System Architecture       COMPLETE
 Hardware Design           COMPLETE
 Software Design           COMPLETE
 Implementation Plan       COMPLETE
-Firmware Development       NOT STARTED
-Hardware Integration       NOT STARTED
-Dry Run                    NOT STARTED
-Rice Validation             NOT STARTED
+Firmware Phases 0–3       IN TREE
+Phase 3 fieldbus bench    DEFERRED until probes and relay are wired
+Firmware Phase 4          NEXT
+Hardware Integration      NOT STARTED
+Dry Run                   NOT STARTED
+Rice Validation           NOT STARTED
 ```
 
-The documentation phase is complete.
-
-The next phase is hardware and firmware implementation.
+Firmware through RS485/Modbus is in `firmware/`. The next implementation step is Phase 4 (ADS1115, moisture/EC, and Actuator Manager) in [`docs/MASTERPLAN.md`](docs/MASTERPLAN.md).
 
 ---
 
@@ -1145,30 +1145,31 @@ The primary objective is **safe, repeatable, measurable, and maintainable rice d
 
 # 34. Repository Structure
 
-Recommended repository structure:
+Current repository layout (ESP-IDF, not PlatformIO):
 
 ```text
-hybrid-solar-rice-dryer/
+PortableHybridSolarPowerRiceDryingMachine/
 │
 ├── README.md
 │
 ├── docs/
+│   ├── MASTERPLAN.md
 │   ├── 01-product-requirements.md
 │   ├── 02-technical-requirements.md
 │   ├── 03-system-architecture.md
 │   ├── 04-hardware-design.md
 │   ├── 05-software-design.md
-│   └── 06-implementation-plan.md
+│   ├── 06-implementation-plan.md
+│   └── ESP32-S3-Touch-LCD-7B-Demo/
 │
-├── firmware/
-│   ├── platformio.ini
+├── firmware/          ESP-IDF project (Phases 0–3)
 │   ├── CMakeLists.txt
-│   ├── sdkconfig.defaults
+│   ├── components/
 │   └── main/
 │
 ├── hardware/
 │   ├── schematics/
-│   ├── wiring/
+│   ├── wiring/        esp32-gpio-map.md
 │   ├── pcb/
 │   └── mechanical/
 │
@@ -1186,22 +1187,17 @@ hybrid-solar-rice-dryer/
 
 # 35. Getting Started
 
-Development should begin with:
+Firmware through Modbus is already in `firmware/`. Continue with:
 
 ```text
-1. Verify Waveshare ESP32-S3 Touch LCD 7B
-2. Create ESP-IDF project
-3. Initialize LVGL
-4. Verify touchscreen
-5. Verify SD card
-6. Verify RTC
-7. Implement RS485
-8. Implement Modbus
-9. Connect sensors
-10. Implement relay communication
+1. Phase 4 — ADS1115 on the shared I2C bus
+2. Moisture and EC conversion, with calibration in NVS
+3. Actuator Manager as the only relay writer
+4. Manual Control screen for fan, elevator, and door
+5. When the bus is wired: commission XY-MD03 probes (hot-air 1, chamber 2) and confirm the N4D8B08 at address 10
 ```
 
-Do not connect the high-power heater to the system until the low-voltage control system and safety functions have been tested.
+Do not connect the high-power heater until Phase 5 safety tests pass.
 
 ---
 
@@ -1211,18 +1207,16 @@ Follow the execution order in:
 
 [`docs/MASTERPLAN.md`](docs/MASTERPLAN.md)
 
-The first firmware milestone is:
+Phases 0–3 firmware is in the tree (board bring-up, RTC, RS485/Modbus, XY-MD03 commissioning, N4D8B08 relay driver). Phase 3 bench checks wait until the probes and relay are wired.
+
+The next milestone is Phase 4:
 
 ```text
-ESP32-S3
+ADS1115
    +
-LVGL
+Moisture / EC
    +
-Touchscreen
+Actuator Manager
    +
-SD Card
-   +
-RTC
+Manual Control screen
 ```
-
-Once this foundation is stable, implement the RS485, Modbus, and ADS1115 layers, then continue through the master plan phases.

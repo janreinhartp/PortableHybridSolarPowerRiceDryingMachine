@@ -79,17 +79,53 @@ Do not add a second I2C controller.
 
 ---
 
-## 5. Product control pins
+## 5. Product control pins — onboard RS485
 
-These pins are reserved for RS485. Firmware must not drive them for unrelated functions.
+The Waveshare board already has an **SP3485** transceiver with **automatic direction control**.
+Use the HY2.0 RS485 A/B header. Do **not** drive a separate DE/RE GPIO.
 
 | GPIO | Direction | Function | Phase |
 |-----:|-----------|----------|------:|
-| 15 | Out | RS485 UART1 TX | 3 |
-| 16 | In | RS485 UART1 RX | 3 |
-| 26 | Out | RS485 DE/RE (high = transmit) | 3 |
+| 16 | Out | UART1 TX → transceiver DI | 3 |
+| 15 | In | UART1 RX ← transceiver RO | 3 |
 
-UART for Modbus/RS485: **UART1** at 9600 8N1 (confirmed when sensors are wired).
+Schematic net names `RS485_TXD` / `RS485_RXD` are from the transceiver side and look swapped vs ESP UART names — that is expected (Waveshare FAQ).
+
+UART for Modbus/RS485: **UART1** at **9600 8N1**.
+
+| Modbus addr | Device |
+|------------:|--------|
+| 1 | **XY-MD03 hot-air** T/H (no DIP — set via Modbus reg `0x0101`) |
+| 2 | **XY-MD03 chamber** T/H (no DIP — set via Modbus reg `0x0101`) |
+| 10 | **N4D8B08 relay** (move DIP here before commissioning sensors) |
+
+### XY-MD03 T/H probes (no DIP switches)
+
+| Topic | Value |
+|--------|--------|
+| Wires | Red VCC (5–28 V), Black GND, Yellow A, White B |
+| Baud | 9600 8N1 |
+| Read T/H | FC04 start **0x0001** count 2 → temp×10, humidity×10 |
+| Set address | FC06 write holding **0x0101** = new ID (1–247) |
+
+Factory address is usually **1**. Commission **one probe at a time** (relay must already be at **10**):
+
+1. Connect only one probe → HMI **→Hotair(1)** or **→Chamber(2)**
+2. Power-cycle the probe and confirm it answers at the new ID
+3. Repeat for the second probe
+
+### Eletechsup N4D8B08 relay (locked for this project)
+
+| Topic | Requirement |
+|--------|-------------|
+| Power | **12 V DC** on relay board — RS485 alone does not power the module |
+| Bus | **A↔A, B↔B**, **GND↔GND** between Waveshare RS485 header and relay |
+| Baud | **9600 8N1** (manual default) |
+| Address | DIP **A0–A5** raw binary (A0=1, A1=2, A2=4, A3=8). Product target **10** = **A1+A3 ON**. (A0+A3 = 9 — wrong for product ID 10.) |
+| Protocol | FC **0x06** write / FC **0x03** read holding regs; channels **0x0001–0x0008**; Close all = reg `0x0000` value `0x0800` |
+| Open / Close | Value `0x0100` open, `0x0200` close (matches N4D8B08 command PDF) |
+
+Relay channels: R1=1 … R5=5. R4/R5 must never both be ON.
 
 ---
 
@@ -97,14 +133,16 @@ UART for Modbus/RS485: **UART1** at 9600 8N1 (confirmed when sensors are wired).
 
 | GPIO | Notes |
 |-----:|-------|
-| 27 | Spare (previously considered for door OPEN limit — unused) |
-| 28 | Spare (previously considered for door CLOSE limit — unused) |
-| 29 | Spare (previously considered for ESP32 E-stop input — unused) |
-| 30 | Spare digital I/O |
-| 31 | Spare digital I/O |
-| 32 | Spare digital I/O |
+| 6 | Board GPIO header (often the only clearly free digital I/O) |
+| 26 | Not used (was wrongly claimed as DE/RE — onboard RS485 is auto-DE) |
+| 27 | Spare if present on header |
+| 28 | Spare if present on header |
+| 29 | Spare if present on header |
+| 30 | Spare if present on header |
+| 31 | Spare if present on header |
+| 32 | Spare if present on header |
 
-Confirm availability on the physical header before wiring.
+Confirm availability on the physical header before wiring. Door limits and E-stop are not ESP32 inputs.
 
 ---
 
@@ -130,4 +168,4 @@ Door motion stops at the actuator’s internal limits. Software must still:
 
 ## 8. Change control
 
-Update this file and `firmware/main/board/gpio_map.h` together. Do not start RS485 or ADS1115 work until this map matches the wired hardware.
+Update this file and `firmware/main/board/gpio_map.h` together. RS485/Modbus firmware follows this map. Phase 4 ADS1115 work uses I2C address `0x48` on the same bus and must keep this map matched to the wired hardware.

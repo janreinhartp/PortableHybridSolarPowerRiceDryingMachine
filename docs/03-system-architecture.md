@@ -159,23 +159,26 @@ Architecture:
 
 # 5. RS485 Sensor Network
 
-The temperature and humidity sensors use RS485 Modbus RTU.
+The temperature and humidity sensors use RS485 Modbus RTU (XY-MD03, 9600 8N1).
 
-Example network:
+Locked network:
 
 ```text
-ESP32-S3
+ESP32-S3  UART1  GPIO16 TX / GPIO15 RX  (onboard auto-DE)
    |
    | RS485
    |
    +---- Address 01
-   |     Hot-Air Temp/RH
+   |     XY-MD03 hot-air
    |
    +---- Address 02
-         Chamber Temp/RH
+   |     XY-MD03 chamber
+   |
+   +---- Address 10
+         N4D8B08 relay (DIP A1+A3)
 ```
 
-Each device must have a unique Modbus address.
+Each device must have a unique Modbus address. Probe IDs are written to holding register `0x0101` with one probe on the bus.
 
 The Sensor Manager is responsible for:
 
