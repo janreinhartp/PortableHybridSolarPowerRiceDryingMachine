@@ -6,16 +6,17 @@ This document defines the implementation plan for the 10 kg/batch Hybrid Solar P
 
 The implementation will follow an incremental approach.
 
-Execution order and locked decisions live in [`MASTERPLAN.md`](MASTERPLAN.md). That plan is the status source. As of the Phase 4 firmware landing:
+Execution order and locked decisions live in [`MASTERPLAN.md`](MASTERPLAN.md). That plan is the status source. As of the Phase 5 firmware landing:
 
 | Master-plan phase | State |
 |---|---|
-| 0 Repository skeleton | In the tree |
-| 1 Board foundation | Firmware in the tree; board checks still open |
-| 2 GPIO map and TinyRTC | Map done; RTC bench check still open |
-| 3 RS485 and Modbus | Firmware in the tree; bus bench deferred until the XY-MD03 probes and N4D8B08 are wired |
-| 4 ADS1115, sensors, actuators | Firmware in the tree; ADS1115/moisture bench still open |
-| 5 Safety, settings, circulation | **Next** |
+| 0 Repository skeleton | Complete |
+| 1 Board foundation | Complete (firmware + board bench) |
+| 2 GPIO map and TinyRTC | Complete (map + RTC bench) |
+| 3 RS485 and Modbus | Complete (firmware + fieldbus bench: 2× XY-MD03 + N4D8B08) |
+| 4 ADS1115, sensors, actuators | Complete (firmware + moisture/EC bench) |
+| 5 Safety, settings, circulation | In the tree |
+| 6 Process and batch | **Next** |
 
 The numbered phases below are the detailed checklist. They use a finer split than the master plan (this document's "Phase 3" Sensor Manager and "Phase 4" Actuator Manager map to master-plan Phase 4). Do not treat an unchecked box here as a reason to redo Phases 0–4 firmware.
 

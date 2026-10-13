@@ -4,8 +4,11 @@
 #include <cstring>
 
 #include "actuator_manager.h"
+#include "circulation_manager.h"
 #include "esp_log.h"
 #include "lvgl.h"
+#include "safety_manager.h"
+#include "settings_manager.h"
 #include "th_sensor.h"
 
 static const char *TAG_UI = "ui";
@@ -16,6 +19,8 @@ static lv_obj_t *s_relay_label = nullptr;
 static lv_obj_t *s_rtc_label = nullptr;
 static lv_obj_t *s_setup_label = nullptr;
 static unsigned *s_tap_counter = nullptr;
+
+static void set_setup_msg(const char *msg);
 
 static const char *ok_fail(bool ok)
 {
@@ -50,6 +55,10 @@ static void on_elev_toggle(lv_event_t *e)
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
         return;
     }
+    if (circulation_manager_is_active()) {
+        circulation_manager_stop();
+        set_setup_msg("Circulation STOP (manual elevator)");
+    }
     relay_state_t st {};
     actuator_manager_refresh(&st);
     actuator_manager_set_elevator(!st.elevator);
@@ -62,8 +71,42 @@ static void on_heater_toggle(lv_event_t *e)
     }
     relay_state_t st {};
     actuator_manager_refresh(&st);
-    /* Control-line test only — keep heater power disconnected until Phase 5. */
-    actuator_manager_set_heater(!st.heater);
+    /* Heater requests go through Safety Manager (heater-off authority). */
+    safety_manager_request_heater(!st.heater);
+}
+
+static void on_circ_toggle(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
+        return;
+    }
+    dryer_settings_t cfg {};
+    settings_manager_get(&cfg);
+    circulation_manager_configure(&cfg);
+    if (circulation_manager_is_active()) {
+        circulation_manager_stop();
+        set_setup_msg("Circulation STOP");
+    } else {
+        if (circulation_manager_start() == ESP_OK) {
+            set_setup_msg(cfg.circulation_mode == CIRCULATION_MODE_CONTINUOUS
+                              ? "Circulation START continuous"
+                              : "Circulation START interval");
+        } else {
+            set_setup_msg("Circulation START failed (check settings)");
+        }
+    }
+}
+
+static void on_fault_ack(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
+        return;
+    }
+    if (safety_manager_acknowledge() == ESP_OK) {
+        set_setup_msg("Fault acknowledged");
+    } else {
+        set_setup_msg("Fault ACK refused (condition still active)");
+    }
 }
 
 static void on_door_open(lv_event_t *e)
@@ -94,6 +137,9 @@ static void on_all_off(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
         return;
+    }
+    if (circulation_manager_is_active()) {
+        circulation_manager_stop();
     }
     actuator_manager_all_off();
 }
@@ -183,13 +229,14 @@ void ui_manager_show_foundation_screen(const system_status_t *status)
     lv_obj_set_style_bg_color(scr, lv_color_hex(0x1B2838), 0);
 
     lv_obj_t *title = lv_label_create(scr);
-    lv_label_set_text(title, "Rice Dryer — Phase 4");
+    lv_label_set_text(title, "Rice Dryer — Phase 5");
     lv_obj_set_style_text_color(title, lv_color_hex(0xF2F5F8), 0);
     lv_obj_set_style_text_font(title, &lv_font_montserrat_24, 0);
     lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 12);
 
     lv_obj_t *subtitle = lv_label_create(scr);
-    lv_label_set_text(subtitle, "Manual Control via Actuator Mgr  |  heater power stay disconnected");
+    lv_label_set_text(subtitle,
+                      "Safety + Settings + Circulation  |  keep heater power disconnected");
     lv_obj_set_style_text_color(subtitle, lv_color_hex(0x9BB0C4), 0);
     lv_obj_set_style_text_font(subtitle, &lv_font_montserrat_14, 0);
     lv_obj_align(subtitle, LV_ALIGN_TOP_MID, 0, 44);
@@ -206,32 +253,36 @@ void ui_manager_show_foundation_screen(const system_status_t *status)
 
     s_relay_label = lv_label_create(scr);
     lv_obj_set_style_text_color(s_relay_label, lv_color_hex(0xF0C808), 0);
-    lv_obj_set_style_text_font(s_relay_label, &lv_font_montserrat_16, 0);
-    lv_obj_align(s_relay_label, LV_ALIGN_TOP_LEFT, 32, 250);
+    lv_obj_set_style_text_font(s_relay_label, &lv_font_montserrat_14, 0);
+    lv_obj_align(s_relay_label, LV_ALIGN_TOP_LEFT, 32, 240);
 
     s_rtc_label = lv_label_create(scr);
     lv_obj_set_style_text_color(s_rtc_label, lv_color_hex(0x9BB0C4), 0);
     lv_obj_set_style_text_font(s_rtc_label, &lv_font_montserrat_14, 0);
-    lv_obj_align(s_rtc_label, LV_ALIGN_TOP_LEFT, 32, 310);
+    lv_obj_align(s_rtc_label, LV_ALIGN_TOP_LEFT, 32, 320);
 
     s_setup_label = lv_label_create(scr);
     lv_obj_set_style_text_color(s_setup_label, lv_color_hex(0xF2A65A), 0);
     lv_obj_set_style_text_font(s_setup_label, &lv_font_montserrat_14, 0);
-    lv_obj_align(s_setup_label, LV_ALIGN_TOP_LEFT, 32, 350);
+    lv_obj_align(s_setup_label, LV_ALIGN_TOP_LEFT, 32, 360);
     lv_label_set_text(s_setup_label,
                       "Sensor setup: move relay DIP to 10, wire ONE XY-MD03, then assign");
 
-    /* Row 1 — Manual Control (via Actuator Manager) */
-    lv_obj_t *b1 = make_btn(scr, "Fan", on_fan_toggle, 120);
-    lv_obj_align(b1, LV_ALIGN_BOTTOM_LEFT, 24, -84);
-    lv_obj_t *b2 = make_btn(scr, "Elevator", on_elev_toggle, 130);
-    lv_obj_align(b2, LV_ALIGN_BOTTOM_LEFT, 156, -84);
-    lv_obj_t *b3 = make_btn(scr, "Heater*", on_heater_toggle, 120);
-    lv_obj_align(b3, LV_ALIGN_BOTTOM_LEFT, 300, -84);
-    lv_obj_t *b4 = make_btn(scr, "All OFF", on_all_off, 120);
-    lv_obj_align(b4, LV_ALIGN_BOTTOM_LEFT, 436, -84);
-    lv_obj_t *b5 = make_btn(scr, "Touch+", on_tap_btn, 110);
-    lv_obj_align(b5, LV_ALIGN_BOTTOM_LEFT, 570, -84);
+    /* Row 1 — Manual Control (heater via Safety Manager) */
+    lv_obj_t *b1 = make_btn(scr, "Fan", on_fan_toggle, 100);
+    lv_obj_align(b1, LV_ALIGN_BOTTOM_LEFT, 16, -84);
+    lv_obj_t *b2 = make_btn(scr, "Elevator", on_elev_toggle, 110);
+    lv_obj_align(b2, LV_ALIGN_BOTTOM_LEFT, 128, -84);
+    lv_obj_t *b3 = make_btn(scr, "Heater*", on_heater_toggle, 110);
+    lv_obj_align(b3, LV_ALIGN_BOTTOM_LEFT, 250, -84);
+    lv_obj_t *b4 = make_btn(scr, "All OFF", on_all_off, 100);
+    lv_obj_align(b4, LV_ALIGN_BOTTOM_LEFT, 372, -84);
+    lv_obj_t *b5 = make_btn(scr, "Circ", on_circ_toggle, 90);
+    lv_obj_align(b5, LV_ALIGN_BOTTOM_LEFT, 484, -84);
+    lv_obj_t *b6 = make_btn(scr, "ACK", on_fault_ack, 80);
+    lv_obj_align(b6, LV_ALIGN_BOTTOM_LEFT, 586, -84);
+    lv_obj_t *b7 = make_btn(scr, "Touch+", on_tap_btn, 100);
+    lv_obj_align(b7, LV_ALIGN_BOTTOM_LEFT, 678, -84);
 
     /* Row 2 door + sensor address commissioning */
     lv_obj_t *d1 = make_btn(scr, "Door OPEN", on_door_open, 140);
@@ -304,14 +355,25 @@ void ui_manager_update_runtime(const system_status_t *status, unsigned touch_tap
     }
 
     if (s_relay_label != nullptr) {
-        char line[160];
+        char line[220];
         snprintf(line, sizeof(line),
-                 "Relays  Elev %s  Heat %s  Fan %s  DoorOpen %s  DoorClose %s",
+                 "Relays  Elev %s  Heat %s  Fan %s  DoorOpen %s  DoorClose %s\n"
+                 "Safety  heat_ok=%s  forceHeatOff=%s  forceFanOn=%s  %s\n"
+                 "Circ    %s  elev=%s  mode=%s",
                  on_off(status->relay_elevator),
                  on_off(status->relay_heater),
                  on_off(status->relay_fan),
                  on_off(status->relay_door_open),
-                 on_off(status->relay_door_close));
+                 on_off(status->relay_door_close),
+                 status->heating_permitted ? "YES" : "NO",
+                 status->safety_heater_forced_off ? "YES" : "no",
+                 status->safety_fan_forced_on ? "YES" : "no",
+                 safety_manager_fault_name((fault_code_t)status->active_fault),
+                 status->circulation_active ? "ACTIVE" : "idle",
+                 on_off(status->circulation_elevator_on),
+                 status->circulation_mode == (uint8_t)CIRCULATION_MODE_CONTINUOUS
+                     ? "continuous"
+                     : "interval");
         lv_label_set_text(s_relay_label, line);
     }
 

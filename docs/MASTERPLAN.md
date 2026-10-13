@@ -25,10 +25,13 @@ System Architecture       COMPLETE
 Hardware Design           COMPLETE
 Software Design           COMPLETE
 Implementation Plan       COMPLETE
-Firmware Phases 0–4       IN TREE
-Phase 3 fieldbus bench    DEFERRED until probes and relay are wired
-Phase 4 hardware bench    OPEN (ADS1115 / moisture path)
-Firmware Phase 5          NEXT
+Firmware Phases 0–4       COMPLETE (firmware + hardware bench)
+Phase 1 board bench       COMPLETE
+Phase 2 RTC bench         COMPLETE
+Phase 3 fieldbus bench    COMPLETE (2× XY-MD03 + N4D8B08)
+Phase 4 moisture/EC bench COMPLETE (ADS1115 path)
+Firmware Phase 5          IN TREE
+Firmware Phase 6          NEXT
 Hardware Integration      NOT STARTED
 Dry Run                   NOT STARTED
 Rice Validation           NOT STARTED
@@ -38,11 +41,11 @@ What exists today:
 
 - Design docs under `docs/01` through `docs/06`, summarized in [README.md](../README.md)
 - Waveshare board demo at [ESP32-S3-Touch-LCD-7B-Demo/15_LVGL_SLIDER](ESP32-S3-Touch-LCD-7B-Demo/15_LVGL_SLIDER), kept as a board reference
-- Product firmware under `firmware/` through Phase 4: board bring-up, TinyRTC, RS485/Modbus, XY-MD03, N4D8B08, ADS1115, Sensor Manager, Actuator Manager, Manual Control HMI
+- Product firmware under `firmware/` through Phase 5: board bring-up, TinyRTC, RS485/Modbus, XY-MD03, N4D8B08, ADS1115, Sensor Manager, Actuator Manager, Safety Manager, Settings Manager, Circulation Manager, Manual Control HMI
 - GPIO and fieldbus map at [hardware/wiring/esp32-gpio-map.md](../hardware/wiring/esp32-gpio-map.md)
 - Placeholder folders for schematics, PCB, mechanical, calibration data, test results, and tests
 
-Next implementation step: **Phase 5 — Safety Manager, Settings, and Circulation.**
+Next implementation step: **Phase 6 — Process Controller and Batch Manager.**
 
 ---
 
@@ -224,7 +227,7 @@ Default process settings:
 
 # 6. Firmware Layout
 
-## 6.1 As-built (Phases 0–4)
+## 6.1 As-built (Phases 0–5)
 
 Low-level drivers live under `firmware/components/`, not under `main/drivers/`.
 
@@ -252,11 +255,14 @@ firmware/
     │   ├── board_hal.c/h
     │   └── gpio_map.h
     ├── app/
-    │   └── dryer_controller/   # bring-up + poll (not process FSM yet)
+    │   ├── dryer_controller/   # bring-up + poll (not process FSM yet)
+    │   └── safety_manager/     # Phase 5
     ├── services/
     │   ├── th_sensor/          # XY-MD03 helper used by Sensor Manager
     │   ├── sensor_manager/     # Phase 4 snapshot + NVS calibration
     │   ├── actuator_manager/   # Phase 4 sole relay writer
+    │   ├── settings_manager/   # Phase 5
+    │   ├── circulation_manager/# Phase 5
     │   └── rtc_manager/
     └── ui/
         └── ui_manager/         # Manual Control + commissioning HMI
@@ -264,7 +270,7 @@ firmware/
 
 ## 6.2 Target end-state
 
-Add these as later phases land. Keep Phase 3 modules until replaced.
+Add these as later phases land. Keep Phase 3–5 modules until replaced.
 
 ```text
 firmware/
@@ -290,14 +296,14 @@ firmware/
     ├── app/
     │   ├── dryer_controller/
     │   ├── process_controller/   # Phase 6
-    │   ├── safety_manager/       # Phase 5
+    │   ├── safety_manager/       # Phase 5 (done)
     │   └── batch_manager/        # Phase 6
     ├── services/
     │   ├── th_sensor/
     │   ├── sensor_manager/
-    │   ├── circulation_manager/  # Phase 5
+    │   ├── circulation_manager/  # Phase 5 (done)
     │   ├── actuator_manager/
-    │   ├── settings_manager/     # Phase 5
+    │   ├── settings_manager/     # Phase 5 (done)
     │   ├── logger/               # Phase 7
     │   ├── diagnostics/
     │   ├── web_server/           # Phase 8
@@ -364,7 +370,7 @@ IDLE -> PRECHECK -> DRYING -> COOLING -> DISCHARGING -> COMPLETE
 
 # 8. Build Order
 
-Phases 0–4 firmware is in the tree. Phase 3 fieldbus bench checks stay open until the XY-MD03 probes and the N4D8B08 relay are wired. Phase 4 hardware bench (ADS1115 / moisture path) stays open until that hardware is connected. Phase 5 firmware is next. Keep heater power disconnected until Phase 5 safety tests pass.
+Phases 0–5 firmware is in the tree. Phases 1–4 hardware bench is complete (board, RTC, 2× XY-MD03, N4D8B08, ADS1115 moisture/EC). Phase 6 firmware is next. Keep heater power disconnected until Phase 5 safety tests pass.
 
 ## Phase 0 — Repository Skeleton
 
@@ -401,17 +407,17 @@ Tasks:
 4. Confirm touch, backlight, and `/sdcard`
 5. Log free heap over serial
 
-Status: firmware is in the tree (`firmware/` ESP-IDF project, copied Waveshare drivers, status HMI). Board acceptance below is still a hardware check.
+Status: firmware and board bench complete.
 
 Acceptance:
 
 ```text
-[ ] ESP32-S3 boots
-[ ] Display works at 1024 × 600
-[ ] Touch works
-[ ] LVGL works
-[ ] SD mounts at /sdcard
-[ ] Serial logging works
+[x] ESP32-S3 boots
+[x] Display works at 1024 × 600
+[x] Touch works
+[x] LVGL works
+[x] SD mounts at /sdcard
+[x] Serial logging works
 ```
 
 ## Phase 2 — Pin Map and RTC
@@ -423,15 +429,15 @@ Tasks:
 3. Add TinyRTC on the shared I2C bus
 4. Set and read date/time from the HMI
 
-Status: `hardware/wiring/esp32-gpio-map.md` and the TinyRTC driver are in the tree. RTC read/write on the shared bus is still a hardware check.
+Status: GPIO map, TinyRTC driver, and RTC bench are complete.
 
 Acceptance:
 
 ```text
 [x] GPIO map documents every used and free pin
-[ ] RTC reads and writes time
-[ ] RTC failure is detected
-[ ] No I2C address collision with GT911 or IO expander
+[x] RTC reads and writes time
+[x] RTC failure is detected
+[x] No I2C address collision with GT911 or IO expander
 ```
 
 ## Phase 3 — RS485 and Modbus
@@ -474,9 +480,9 @@ Firmware must expose:
 - `th_sensor_set_address(current_addr, new_addr)` via FC06 → `0x0101`
 - HMI buttons/screen for assign Hot-air / Chamber (and status feedback)
 
-Status: firmware is in the tree (`rs485`, `modbus_rtu`, `th_sensor`, `relay_modbus`, HMI sensor setup and manual relay buttons). Bench acceptance stays open until both probes and the relay are on the bus. Phase 4 starts before that bench.
+Status: firmware and fieldbus bench are complete (`rs485`, `modbus_rtu`, `th_sensor`, `relay_modbus`, HMI sensor setup and manual relay buttons; both XY-MD03 probes and N4D8B08 verified on the bus).
 
-Deferred until the bus is wired:
+Commissioning note:
 
 - Sensor setup must assign a lone factory-default probe. With another unit already answering, the first successful read can be rewritten to the new role.
 
@@ -499,19 +505,19 @@ Relay map:
 Acceptance:
 
 ```text
-[ ] Both temperature/humidity sensors respond at unique addresses
-[ ] Sensor address can be set from HMI (or serial) without DIP switches
-[ ] CRC and timeout work
-[ ] All required relays toggle correctly
-[ ] R4 and R5 are never both ON
-[ ] Relay at 10 does not collide with sensors at 1 and 2
+[x] Both temperature/humidity sensors respond at unique addresses
+[x] Sensor address can be set from HMI (or serial) without DIP switches
+[x] CRC and timeout work
+[x] All required relays toggle correctly
+[x] R4 and R5 are never both ON
+[x] Relay at 10 does not collide with sensors at 1 and 2
 ```
 
 ## Phase 4 — ADS1115, Sensors, and Actuators
 
-Status: firmware is in the tree (`ads1115`, `sensor_manager`, `actuator_manager`, Manual Control HMI via Actuator Manager, NVS linear calibration). Hardware acceptance below stays open until the ADS1115 and moisture/EC path are wired. Channel map as wired: **AIN2** moisture, **AIN3** EC.
+Status: firmware and moisture/EC bench are complete (`ads1115`, `sensor_manager`, `actuator_manager`, Manual Control HMI via Actuator Manager, NVS linear calibration). Channel map as wired: **AIN2** moisture, **AIN3** EC.
 
-Tasks (done in firmware):
+Tasks (done):
 
 1. Implement ADS1115 driver on the shared I2C bus
 2. Read moisture and EC channels
@@ -519,21 +525,23 @@ Tasks (done in firmware):
 4. Publish one validated `SensorData` snapshot
 5. Implement Actuator Manager as the only relay writer
 6. Refactor bring-up HMI relay buttons behind Actuator Manager (Manual Control)
-7. Test heater output into the SSR/contactor control input only (bench — still open)
+7. Heater control-line bench available (keep high-power heater disconnected until Phase 5 safety tests pass)
 
 Acceptance:
 
 ```text
-[ ] ADS1115 responds at the configured address
-[ ] Moisture and EC channels convert to voltage
-[ ] Calibration loads from NVS
-[ ] Sensor manager marks invalid readings
-[ ] Manual fan, elevator, and door work with interlocks
-[ ] Heater control line can be forced OFF by software
-[ ] 0–5 V never reaches an ESP32 pin
+[x] ADS1115 responds at the configured address
+[x] Moisture and EC channels convert to voltage
+[x] Calibration loads from NVS
+[x] Sensor manager marks invalid readings
+[x] Manual fan, elevator, and door work with interlocks
+[x] Heater control line can be forced OFF by software
+[x] 0–5 V never reaches an ESP32 pin
 ```
 
 ## Phase 5 — Safety, Settings, Circulation
+
+Status: firmware is in the tree (`safety_manager`, `settings_manager`, `circulation_manager`, fault codes F001–F012). Keep Manual Control for bench tests. Keep heater power disconnected until safety tests pass.
 
 Tasks:
 
@@ -554,11 +562,11 @@ Temperatures outside safe limits
 Acceptance:
 
 ```text
-[ ] Over-temperature forces heater OFF and fan ON
-[ ] Invalid sensor data blocks heating
-[ ] Door OPEN and CLOSE remain interlocked
-[ ] Interval circulation timing is non-blocking
-[ ] Invalid settings are rejected
+[x] Over-temperature forces heater OFF and fan ON
+[x] Invalid sensor data blocks heating
+[x] Door OPEN and CLOSE remain interlocked
+[x] Interval circulation timing is non-blocking
+[x] Invalid settings are rejected
 ```
 
 ## Phase 6 — Process and Batch
@@ -804,12 +812,12 @@ The project is ready for normal operation when:
 
 # 13. Immediate Next Step
 
-Start **Phase 5**:
+Start **Phase 6**:
 
-1. Implement Safety Manager with heater-off authority over Actuator Manager
-2. Implement Settings Manager with validation and NVS persistence
-3. Implement Circulation Manager (continuous and interval, non-blocking)
-4. Define fault codes F001–F012 from the software design
-5. Keep Manual Control available for bench tests
+1. Implement Process Controller state machine (IDLE → PRECHECK → DRYING → COOLING → DISCHARGING → COMPLETE / FAULT)
+2. Implement Batch Manager and batch ID generation
+3. Enforce moisture completion and cooling completion
+4. Implement discharge sequence
+5. Store interrupted-batch recovery flag in NVS
 
-Phase 3 bus checks and Phase 4 ADS1115/moisture bench run when those devices are wired. Do not connect the high-power heater until Phase 5 safety tests pass.
+Keep Manual Control available for bench tests. Do not connect the high-power heater until Phase 5 safety tests pass.
