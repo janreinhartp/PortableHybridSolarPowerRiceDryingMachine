@@ -1784,7 +1784,7 @@ The software must enforce:
 
 Low-level drivers live under `firmware/components/` (ESP-IDF components), not under `main/drivers/`. Application, services, board HAL, and UI live under `firmware/main/`.
 
-### As-built (Phases 0–4)
+### As-built (Phases 0–5)
 
 ```text
 firmware/
@@ -1808,11 +1808,14 @@ firmware/
     │   ├── board_hal.c/h
     │   └── gpio_map.h
     ├── app/
-    │   └── dryer_controller/   # bring-up + poll; not process FSM yet
+    │   ├── dryer_controller/   # bring-up + poll; not process FSM yet
+    │   └── safety_manager/     # Phase 5
     ├── services/
     │   ├── th_sensor/
     │   ├── sensor_manager/
     │   ├── actuator_manager/
+    │   ├── settings_manager/   # Phase 5
+    │   ├── circulation_manager/# Phase 5
     │   └── rtc_manager/
     └── ui/
         └── ui_manager/         # Manual Control + commissioning HMI
@@ -1831,14 +1834,14 @@ firmware/
     ├── app/
     │   ├── dryer_controller/
     │   ├── process_controller/   # Phase 6 — planned
-    │   ├── safety_manager/       # Phase 5 — planned
+    │   ├── safety_manager/       # Phase 5 (done)
     │   └── batch_manager/        # Phase 6 — planned
     ├── services/
     │   ├── th_sensor/
     │   ├── sensor_manager/
-    │   ├── circulation_manager/  # Phase 5 — planned
+    │   ├── circulation_manager/  # Phase 5 (done)
     │   ├── actuator_manager/
-    │   ├── settings_manager/     # Phase 5 — planned
+    │   ├── settings_manager/     # Phase 5 (done)
     │   ├── logger/               # Phase 7 — planned
     │   ├── diagnostics/          # planned
     │   ├── web_server/           # Phase 8 — planned

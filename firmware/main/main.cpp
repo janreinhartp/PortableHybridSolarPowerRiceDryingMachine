@@ -31,7 +31,8 @@ static void runtime_status_task(void *arg)
 
         ESP_LOGI(TAG,
                  "hotair=%s/%.1fC chamber=%s/%.1fC moist=%s/%.1f%% ec=%s/%.2f "
-                 "relay=%s@%u elev=%d heat=%d fan=%d door=%d/%d",
+                 "relay=%s@%u elev=%d heat=%d fan=%d door=%d/%d "
+                 "heat_ok=%d fault=%u circ=%d",
                  s_status.hotair_ok ? "ok" : "fail", s_status.hotair_temp_c,
                  s_status.chamber_ok ? "ok" : "fail", s_status.chamber_temp_c,
                  s_status.moisture_ok ? "ok" : "fail", s_status.moisture_pct,
@@ -40,7 +41,10 @@ static void runtime_status_task(void *arg)
                  (unsigned)actuator_manager_relay_address(),
                  (int)s_status.relay_elevator, (int)s_status.relay_heater,
                  (int)s_status.relay_fan,
-                 (int)s_status.relay_door_open, (int)s_status.relay_door_close);
+                 (int)s_status.relay_door_open, (int)s_status.relay_door_close,
+                 (int)s_status.heating_permitted,
+                 (unsigned)s_status.active_fault,
+                 (int)s_status.circulation_active);
 
         if (board_hal_lvgl_lock(100)) {
             ui_manager_update_runtime(&s_status, s_touch_taps);
@@ -52,7 +56,7 @@ static void runtime_status_task(void *arg)
 
 extern "C" void app_main(void)
 {
-    ESP_LOGI(TAG, "Hybrid Solar Power Rice Dryer firmware starting (Phase 4)");
+    ESP_LOGI(TAG, "Hybrid Solar Power Rice Dryer firmware starting (Phase 5)");
 
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -74,5 +78,5 @@ extern "C" void app_main(void)
     }
 
     xTaskCreate(runtime_status_task, "runtime_status", 6144, nullptr, 3, nullptr);
-    ESP_LOGI(TAG, "Phase 4 running");
+    ESP_LOGI(TAG, "Phase 5 running (Safety / Settings / Circulation)");
 }

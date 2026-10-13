@@ -898,16 +898,19 @@ System Architecture       COMPLETE
 Hardware Design           COMPLETE
 Software Design           COMPLETE
 Implementation Plan       COMPLETE
-Firmware Phases 0–4       IN TREE
-Phase 3 fieldbus bench    DEFERRED until probes and relay are wired
-Phase 4 hardware bench    OPEN (ADS1115 / moisture path)
-Firmware Phase 5          NEXT
+Firmware Phases 0–4       COMPLETE (firmware + hardware bench)
+Phase 1 board bench       COMPLETE
+Phase 2 RTC bench         COMPLETE
+Phase 3 fieldbus bench    COMPLETE (2× XY-MD03 + N4D8B08)
+Phase 4 moisture/EC bench COMPLETE (ADS1115 path)
+Firmware Phase 5          IN TREE
+Firmware Phase 6          NEXT
 Hardware Integration      NOT STARTED
 Dry Run                   NOT STARTED
 Rice Validation           NOT STARTED
 ```
 
-Firmware through Phase 4 (ADS1115, Sensor Manager, Actuator Manager, Manual Control) is in `firmware/`. The next implementation step is Phase 5 (Safety, Settings, Circulation) in [`docs/MASTERPLAN.md`](docs/MASTERPLAN.md).
+Firmware through Phase 5 (Safety, Settings, Circulation) is in `firmware/`. Phases 1–4 hardware bench is confirmed. The next implementation step is Phase 6 (Process Controller and Batch Manager) in [`docs/MASTERPLAN.md`](docs/MASTERPLAN.md).
 
 ---
 
@@ -1188,13 +1191,13 @@ PortableHybridSolarPowerRiceDryingMachine/
 
 # 35. Getting Started
 
-Firmware through Phase 4 is already in `firmware/`. Continue with:
+Firmware through Phase 5 is already in `firmware/`. Continue with:
 
 ```text
-1. Phase 5 — Safety Manager (heater-off authority)
-2. Settings Manager with validation and NVS persistence
-3. Circulation Manager (continuous and interval)
-4. When the bus / ADS1115 are wired: finish Phase 3–4 hardware bench checks
+1. Phase 6 — Process Controller state machine
+2. Batch Manager and batch ID generation
+3. Moisture / cooling completion and discharge sequence
+4. Interrupted-batch recovery flag in NVS
 ```
 
 Do not connect the high-power heater until Phase 5 safety tests pass.
@@ -1207,14 +1210,12 @@ Follow the execution order in:
 
 [`docs/MASTERPLAN.md`](docs/MASTERPLAN.md)
 
-Phases 0–4 firmware is in the tree (board bring-up, RTC, RS485/Modbus, ADS1115, Sensor Manager, Actuator Manager, Manual Control). Phase 3–4 bench checks wait until probes, relay, and the moisture path are wired.
+Phases 0–5 firmware is in the tree (board bring-up, RTC, RS485/Modbus, ADS1115, Sensor Manager, Actuator Manager, Safety Manager, Settings Manager, Circulation Manager, Manual Control). Phases 1–4 hardware bench is complete.
 
-The next milestone is Phase 5:
+The next milestone is Phase 6:
 
 ```text
-Safety Manager
+Process Controller
    +
-Settings Manager
-   +
-Circulation Manager
+Batch Manager
 ```

@@ -2,12 +2,15 @@
 
 #include "actuator_manager.h"
 #include "board_hal.h"
+#include "circulation_manager.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "modbus_rtu.h"
 #include "relay_modbus.h"
 #include "rtc_manager.h"
+#include "safety_manager.h"
 #include "sensor_manager.h"
+#include "settings_manager.h"
 #include "th_sensor.h"
 
 static const char *TAG = "dryer_ctrl";
@@ -43,7 +46,7 @@ esp_err_t dryer_controller_init(system_status_t *status)
     *status = {};
     refresh_heap(status);
 
-    ESP_LOGI(TAG, "Phase 4 bring-up starting");
+    ESP_LOGI(TAG, "Phase 5 bring-up starting");
 
     board_hal_status_t board {};
     esp_err_t err = board_hal_init(&board);
@@ -72,6 +75,15 @@ esp_err_t dryer_controller_init(system_status_t *status)
     /* ADS1115 + calibration after shared I2C is up (touch bring-up). */
     sensor_manager_init();
     status->ads1115_ok = false;
+
+    settings_manager_init();
+    safety_manager_init();
+    circulation_manager_init();
+    {
+        dryer_settings_t cfg {};
+        settings_manager_get(&cfg);
+        circulation_manager_configure(&cfg);
+    }
 
     esp_err_t bus_err = modbus_rtu_init();
     status->rs485_ok = (bus_err == ESP_OK);
@@ -131,9 +143,37 @@ void dryer_controller_poll_fieldbus(system_status_t *status)
     status->moisture_voltage = sensors.moisture_voltage;
     status->ec_voltage = sensors.ec_voltage;
 
+    dryer_settings_t settings {};
+    settings_manager_get(&settings);
+    safety_manager_evaluate(&sensors, &settings, status->relay_ok, status->rtc_ok);
+
+    if (circulation_manager_is_active()) {
+        circulation_manager_tick();
+    }
+
+    /* Refresh coils after safety / circulation may have written. */
+    if (status->relay_ok) {
+        actuator_manager_refresh(&relays);
+    } else {
+        actuator_manager_get_state(&relays);
+    }
+
     status->relay_elevator = relays.elevator;
     status->relay_heater = relays.heater;
     status->relay_fan = relays.fan;
     status->relay_door_open = relays.door_open;
     status->relay_door_close = relays.door_close;
+
+    safety_status_t safety {};
+    safety_manager_get_status(&safety);
+    status->heating_permitted = safety.heating_permitted;
+    status->safety_heater_forced_off = safety.heater_forced_off;
+    status->safety_fan_forced_on = safety.fan_forced_on;
+    status->active_fault = (uint8_t)safety.active_fault;
+
+    circulation_status_t circ {};
+    circulation_manager_get_status(&circ);
+    status->circulation_active = circ.active;
+    status->circulation_elevator_on = circ.elevator_on;
+    status->circulation_mode = (uint8_t)circ.mode;
 }

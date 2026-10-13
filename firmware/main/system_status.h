@@ -44,6 +44,15 @@ typedef struct {
     bool relay_fan;
     bool relay_door_open;
     bool relay_door_close;
+
+    /* Phase 5 — safety / settings / circulation summary for HMI */
+    bool heating_permitted;
+    bool safety_heater_forced_off;
+    bool safety_fan_forced_on;
+    uint8_t active_fault; /* fault_code_t */
+    bool circulation_active;
+    bool circulation_elevator_on;
+    uint8_t circulation_mode;
 } system_status_t;
 
 #ifdef __cplusplus

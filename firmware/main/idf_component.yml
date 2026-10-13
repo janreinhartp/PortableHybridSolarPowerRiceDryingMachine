@@ -1,6 +1,8 @@
 dependencies:
+  # Stay on ESP-IDF 5.x. IDF 6.x needs a matching component-manager
+  # (interface_version 5); mixing 6.x CMake with a 5.x Python env fails configure.
   idf:
-    version: ">=5.1.0"
+    version: ">=5.1.0,<6.0.0"
   lvgl/lvgl:
     version: "~8.4.0"
     override_path: "../components/lvgl_port/lvgl__lvgl"
