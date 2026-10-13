@@ -64,6 +64,29 @@ typedef struct {
     float target_moisture_pct;
     float drying_temperature_c;
     float cooling_temperature_c;
+
+    /* Phase 7 — settings snapshot, batch result, logger, and alarm context */
+    float temperature_hysteresis_c;
+    uint32_t circulation_interval_s;
+    uint32_t circulation_run_time_s;
+    uint32_t discharge_time_s;
+    uint32_t min_drying_time_s;
+    uint32_t max_drying_time_s;
+    float max_hot_air_temperature_c;
+    uint8_t discharge_phase;
+    uint32_t discharge_remaining_s;
+    bool precheck_ready;
+    bool logger_ok;
+    uint32_t logger_dropped;
+    float initial_moisture_pct;
+    float final_moisture_pct;
+    float final_ec;
+    float max_chamber_temp_c;
+    float avg_chamber_temp_c;
+    char batch_started[24];
+    char batch_ended[24];
+    char fault_time[24];
+    char fault_state[16];
 } system_status_t;
 
 #ifdef __cplusplus

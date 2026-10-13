@@ -12,6 +12,7 @@ The numbered design documents remain the requirements source. This file tells th
 | [04-hardware-design.md](04-hardware-design.md) | Electrical and mechanical hardware |
 | [05-software-design.md](05-software-design.md) | Firmware architecture |
 | [06-implementation-plan.md](06-implementation-plan.md) | Detailed phase checklist |
+| [07-hmi-ux-notes.md](07-hmi-ux-notes.md) | Phase 7 HMI UX debt; redesign deferred until a design guideline |
 | **MASTERPLAN.md** | **Execution order, demo reuse, locked decisions** |
 
 ---
@@ -32,6 +33,7 @@ Phase 3 fieldbus bench    COMPLETE (2× XY-MD03 + N4D8B08)
 Phase 4 moisture/EC bench COMPLETE (ADS1115 path)
 Firmware Phase 5          IN TREE
 Firmware Phase 6          IN TREE
+Firmware Phase 7          IN TREE
 Hardware Integration      NOT STARTED
 Dry Run                   NOT STARTED
 Rice Validation           NOT STARTED
@@ -41,11 +43,11 @@ What exists today:
 
 - Design docs under `docs/01` through `docs/06`, summarized in [README.md](../README.md)
 - Waveshare board demo at [ESP32-S3-Touch-LCD-7B-Demo/15_LVGL_SLIDER](ESP32-S3-Touch-LCD-7B-Demo/15_LVGL_SLIDER), kept as a board reference
-- Product firmware under `firmware/` through Phase 6: board bring-up, TinyRTC, RS485/Modbus, XY-MD03, N4D8B08, ADS1115, Sensor Manager, Actuator Manager, Safety Manager, Settings Manager, Circulation Manager, Process Controller, Batch Manager, Manual Control HMI with START / ACK INT / ABORT
+- Product firmware under `firmware/` through Phase 7: board bring-up, TinyRTC, RS485/Modbus, XY-MD03, N4D8B08, ADS1115, Sensor Manager, Actuator Manager, Safety Manager, Settings Manager, Circulation Manager, Process Controller, Batch Manager, queue-based SD logger, and the product HMI (Dashboard through System Info). Manual control remains available for bench tests.
 - GPIO and fieldbus map at [hardware/wiring/esp32-gpio-map.md](../hardware/wiring/esp32-gpio-map.md)
 - Placeholder folders for schematics, PCB, mechanical, calibration data, test results, and tests
 
-Next implementation step: **Phase 7 — Logging and HMI.**
+Next implementation step: **Phase 8 — Local Web Dashboard.**
 
 ---
 
@@ -227,7 +229,7 @@ Default process settings:
 
 # 6. Firmware Layout
 
-## 6.1 As-built (Phases 0–5)
+## 6.1 As-built (Phases 0–7)
 
 Low-level drivers live under `firmware/components/`, not under `main/drivers/`.
 
@@ -255,17 +257,32 @@ firmware/
     │   ├── board_hal.c/h
     │   └── gpio_map.h
     ├── app/
-    │   ├── dryer_controller/   # bring-up + poll (not process FSM yet)
-    │   └── safety_manager/     # Phase 5
+    │   ├── dryer_controller/   # bring-up + fieldbus poll
+    │   ├── process_controller/ # Phase 6 state machine
+    │   ├── safety_manager/     # Phase 5
+    │   └── batch_manager/      # Phase 6 lifecycle + NVS recovery
     ├── services/
     │   ├── th_sensor/          # XY-MD03 helper used by Sensor Manager
     │   ├── sensor_manager/     # Phase 4 snapshot + NVS calibration
     │   ├── actuator_manager/   # Phase 4 sole relay writer
     │   ├── settings_manager/   # Phase 5
     │   ├── circulation_manager/# Phase 5
+    │   ├── logger/             # Phase 7 queue + SD
     │   └── rtc_manager/
     └── ui/
-        └── ui_manager/         # Manual Control + commissioning HMI
+        ├── ui_manager/         # shell, navigation, 1 Hz refresh
+        └── screens/            # Phase 7 product HMI
+            ├── dashboard/
+            ├── batch_setup/
+            ├── drying/
+            ├── cooling/
+            ├── discharge/
+            ├── complete/
+            ├── manual_control/
+            ├── settings/
+            ├── history/
+            ├── alarms/
+            └── system_info/
 ```
 
 ## 6.2 Target end-state
@@ -296,22 +313,21 @@ firmware/
     ├── app/
     │   ├── dryer_controller/
     │   ├── process_controller/   # Phase 6
-    │   ├── safety_manager/       # Phase 5 (done)
+    │   ├── safety_manager/       # Phase 5
     │   └── batch_manager/        # Phase 6
     ├── services/
     │   ├── th_sensor/
     │   ├── sensor_manager/
-    │   ├── circulation_manager/  # Phase 5 (done)
+    │   ├── circulation_manager/  # Phase 5
     │   ├── actuator_manager/
-    │   ├── settings_manager/     # Phase 5 (done)
+    │   ├── settings_manager/     # Phase 5
     │   ├── logger/               # Phase 7
-    │   ├── diagnostics/
+    │   ├── diagnostics/          # later
     │   ├── web_server/           # Phase 8
     │   └── rtc_manager/
     └── ui/
-        ├── ui_manager/
-        ├── screens/              # Phase 7 product HMI
-        └── components/
+        ├── ui_manager/           # Phase 7
+        └── screens/              # Phase 7
 ```
 
 Language choice:
@@ -370,7 +386,7 @@ IDLE -> PRECHECK -> DRYING -> COOLING -> DISCHARGING -> COMPLETE
 
 # 8. Build Order
 
-Phases 0–6 firmware is in the tree. Phases 1–4 hardware bench is complete (board, RTC, 2× XY-MD03, N4D8B08, ADS1115 moisture/EC). Phase 7 (logging + full HMI) is next. Keep heater power disconnected until Phase 5 safety tests pass.
+Phases 0–7 firmware is in the tree. Phases 1–4 hardware bench is complete (board, RTC, 2× XY-MD03, N4D8B08, ADS1115 moisture/EC). Phase 8 (read-only local web dashboard) is next. Keep heater power disconnected until Phase 5 safety tests pass.
 
 ## Phase 0 — Repository Skeleton
 
@@ -605,6 +621,10 @@ Acceptance:
 
 ## Phase 7 — Logging and HMI
 
+Firmware for the tasks below is in the tree. Bench acceptance is still open.
+
+The Phase 7 HMI is a **functional baseline**, not an operator-ready design. It works on the panel but is not user-friendly. A major UX redesign is deferred until a design guideline is written — see [07-hmi-ux-notes.md](07-hmi-ux-notes.md). Do not spend implementation time on a cosmetic HMI overhaul before that guideline exists.
+
 Tasks:
 
 1. Queue-based logger at 1-second interval during active states
@@ -619,6 +639,13 @@ Acceptance:
 [ ] History lists completed batches
 [ ] Alarms show code, time, and state
 [ ] Touchscreen remains responsive during logging
+```
+
+UX redesign (separate from the checklist above):
+
+```text
+[ ] HMI design guideline agreed (docs/08-hmi-design-guideline.md or successor)
+[ ] Operator-facing screens redesigned per that guideline
 ```
 
 ## Phase 8 — Local Web Dashboard
@@ -812,11 +839,11 @@ The project is ready for normal operation when:
 
 # 13. Immediate Next Step
 
-Start **Phase 7**:
+Start **Phase 8**:
 
-1. Queue-based logger at 1-second interval during active states
-2. Batch summary at completion (SD)
-3. Screens: Dashboard, Batch Setup, Drying, Cooling, Discharge, Complete, Manual, Settings, History, Alarms, System Info
-4. HMI posts commands through the application layer only
+1. Start Wi-Fi AP `RiceDryer-XXXX`
+2. Serve read-only dashboard at `192.168.4.1`
+3. Implement the locked GET API
+4. Stream CSV export from the SD card
 
-Phase 6 Process Controller and Batch Manager are in the tree (START / ACK INT / ABORT on the foundation screen). Keep Manual Control available for bench tests. Do not connect the high-power heater until Phase 5 safety tests pass.
+Phase 7 logger and product HMI are in the tree as a functional baseline. HMI UX redesign is deferred — see [07-hmi-ux-notes.md](07-hmi-ux-notes.md). Keep Manual Control available for bench tests. Do not connect the high-power heater until Phase 5 safety tests pass.

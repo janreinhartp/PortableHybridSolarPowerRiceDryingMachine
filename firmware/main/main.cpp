@@ -48,7 +48,7 @@ static void runtime_status_task(void *arg)
 
 extern "C" void app_main(void)
 {
-    ESP_LOGI(TAG, "Hybrid Solar Power Rice Dryer firmware starting (Phase 6)");
+    ESP_LOGI(TAG, "Hybrid Solar Power Rice Dryer firmware starting (Phase 7)");
 
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -65,10 +65,10 @@ extern "C" void app_main(void)
 
     if (board_hal_lvgl_lock(-1)) {
         ui_manager_bind_tap_counter(&s_touch_taps);
-        ui_manager_show_foundation_screen(&s_status);
+        ui_manager_show_hmi(&s_status);
         board_hal_lvgl_unlock();
     }
 
-    xTaskCreate(runtime_status_task, "runtime_status", 6144, nullptr, 3, nullptr);
-    ESP_LOGI(TAG, "Phase 6 running (Process Controller / Batch Manager)");
+    xTaskCreate(runtime_status_task, "runtime_status", 8192, nullptr, 3, nullptr);
+    ESP_LOGI(TAG, "Phase 7 running (logger + product HMI)");
 }

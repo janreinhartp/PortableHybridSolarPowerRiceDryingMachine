@@ -42,6 +42,40 @@ const char *safety_manager_fault_name(fault_code_t code)
     }
 }
 
+const char *safety_manager_fault_hint(fault_code_t code)
+{
+    switch (code) {
+    case FAULT_F001_OVER_TEMPERATURE:
+        return "Heater has been disabled. Check the dryer before continuing.";
+    case FAULT_F002_EMERGENCY_STOP:
+        return "Emergency stop opened the main contactor. Reset it on the panel.";
+    case FAULT_F003_MOISTURE_SENSOR:
+        return "Moisture reading is invalid. Check the sensor before continuing.";
+    case FAULT_F004_HOT_AIR_SENSOR:
+        return "Hot-air sensor is offline. Heater stays off until it recovers.";
+    case FAULT_F005_CHAMBER_SENSOR:
+        return "Chamber sensor is offline. Heater stays off until it recovers.";
+    case FAULT_F006_MODBUS_COMMUNICATION:
+        return "Relay board is not responding. Check RS485 wiring.";
+    case FAULT_F007_ELEVATOR_TIMEOUT:
+        return "Elevator did not finish in time. Inspect the conveyor.";
+    case FAULT_F008_DOOR_TIMEOUT:
+        return "Door did not finish moving. Inspect the actuator.";
+    case FAULT_F009_SD_CARD_ERROR:
+        return "SD card logging failed. Batch data may be incomplete.";
+    case FAULT_F010_MAX_DRYING_TIME:
+        return "Maximum drying time elapsed. Heater has been disabled.";
+    case FAULT_F011_RTC_ERROR:
+        return "Clock is not available. Batch timestamps need the RTC.";
+    case FAULT_F012_INVALID_CONFIGURATION:
+        return "Settings were rejected. Fix them before starting again.";
+    case FAULT_NONE:
+        return "No active fault.";
+    default:
+        return "Check the dryer before continuing.";
+    }
+}
+
 static void set_fault(fault_code_t code)
 {
     if (s_status.active_fault != code) {

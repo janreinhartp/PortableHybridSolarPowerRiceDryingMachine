@@ -178,29 +178,25 @@ There is no software-controlled loading stage.
 
 # 4. Service Modules
 
-As-built after Phase 4:
+As-built services:
 
 ```text
 services/
 ├── th_sensor/              # XY-MD03 Modbus helper
 ├── sensor_manager/         # validated SensorData snapshot + NVS calibration
 ├── actuator_manager/       # only relay writer
+├── settings_manager/       # Phase 5
+├── circulation_manager/    # Phase 5
+├── logger/                 # Phase 7 queue + SD
 └── rtc_manager/
 ```
 
-Target services (add in later phases):
+Still later:
 
 ```text
 services/
-├── th_sensor/
-├── sensor_manager/
-├── circulation_manager/    # Phase 5
-├── actuator_manager/
-├── settings_manager/       # Phase 5
-├── logger/                 # Phase 7
 ├── diagnostics/
-├── web_server/             # Phase 8
-└── rtc_manager/
+└── web_server/             # Phase 8
 ```
 
 `th_sensor/` remains the low-level XY-MD03 helper. Sensor Manager owns the combined T/H + ADS1115 moisture/EC snapshot.
@@ -1784,7 +1780,7 @@ The software must enforce:
 
 Low-level drivers live under `firmware/components/` (ESP-IDF components), not under `main/drivers/`. Application, services, board HAL, and UI live under `firmware/main/`.
 
-### As-built (Phases 0–5)
+### As-built (Phases 0–7)
 
 ```text
 firmware/
@@ -1808,17 +1804,21 @@ firmware/
     │   ├── board_hal.c/h
     │   └── gpio_map.h
     ├── app/
-    │   ├── dryer_controller/   # bring-up + poll; not process FSM yet
-    │   └── safety_manager/     # Phase 5
+    │   ├── dryer_controller/   # bring-up + fieldbus poll
+    │   ├── process_controller/ # Phase 6
+    │   ├── safety_manager/     # Phase 5
+    │   └── batch_manager/      # Phase 6
     ├── services/
     │   ├── th_sensor/
     │   ├── sensor_manager/
     │   ├── actuator_manager/
     │   ├── settings_manager/   # Phase 5
     │   ├── circulation_manager/# Phase 5
+    │   ├── logger/             # Phase 7
     │   └── rtc_manager/
     └── ui/
-        └── ui_manager/         # Manual Control + commissioning HMI
+        ├── ui_manager/         # Phase 7 shell
+        └── screens/            # Phase 7 product HMI
 ```
 
 ### Target end-state (later phases)
@@ -1842,13 +1842,13 @@ firmware/
     │   ├── circulation_manager/  # Phase 5 (done)
     │   ├── actuator_manager/
     │   ├── settings_manager/     # Phase 5 (done)
-    │   ├── logger/               # Phase 7 — planned
-    │   ├── diagnostics/          # planned
+    │   ├── logger/               # Phase 7
+    │   ├── diagnostics/          # later
     │   ├── web_server/           # Phase 8 — planned
     │   └── rtc_manager/
     └── ui/
         ├── ui_manager/
-        ├── screens/              # Phase 7 product HMI — planned
+        ├── screens/              # Phase 7 product HMI
         │   ├── dashboard/
         │   ├── batch_setup/
         │   ├── drying/

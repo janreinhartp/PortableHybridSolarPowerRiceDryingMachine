@@ -68,6 +68,9 @@ esp_err_t safety_manager_request_heater(bool on);
 
 const char *safety_manager_fault_name(fault_code_t code);
 
+/** Short operator text for the alarm screen. */
+const char *safety_manager_fault_hint(fault_code_t code);
+
 #ifdef __cplusplus
 }
 #endif

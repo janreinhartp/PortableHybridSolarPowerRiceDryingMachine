@@ -23,6 +23,8 @@ typedef struct {
 } batch_recovery_blob_t;
 
 static batch_status_t s_status {};
+static double s_temp_sum = 0.0;
+static uint32_t s_temp_samples = 0;
 
 static uint32_t now_s(void)
 {
@@ -153,6 +155,9 @@ esp_err_t batch_manager_create(const sensor_data_t *sensors)
     s_status.initial_moisture = sensors->moisture;
     s_status.initial_chamber_temp_c = sensors->chamber_temperature;
     s_status.max_chamber_temp_c = sensors->chamber_temperature;
+    s_temp_sum = 0.0;
+    s_temp_samples = 0;
+    s_status.avg_chamber_temp_c = 0.0f;
 
     ESP_LOGI(TAG, "Created %s moist=%.1f chamber=%.1f", s_status.batch_id,
              s_status.initial_moisture, s_status.initial_chamber_temp_c);
@@ -176,6 +181,9 @@ void batch_manager_note_chamber_temp(float chamber_temp_c)
     if (chamber_temp_c > s_status.max_chamber_temp_c) {
         s_status.max_chamber_temp_c = chamber_temp_c;
     }
+    s_temp_sum += chamber_temp_c;
+    s_temp_samples++;
+    s_status.avg_chamber_temp_c = (float)(s_temp_sum / (double)s_temp_samples);
 }
 
 esp_err_t batch_manager_save_recovery(batch_process_state_t state,
