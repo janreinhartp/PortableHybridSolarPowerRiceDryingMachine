@@ -1,10 +1,10 @@
+#include "actuator_manager.h"
 #include "board_hal.h"
 #include "dryer_controller.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "nvs_flash.h"
-#include "relay_modbus.h"
 #include "ui_manager.h"
 
 static const char *TAG = "main";
@@ -24,16 +24,20 @@ static void runtime_status_task(void *arg)
         /* Once the relay answers, force a safe all-OFF (fail-soft if it drops). */
         if (s_status.relay_ok && !safe_off_attempted) {
             safe_off_attempted = true;
-            ESP_LOGI(TAG, "Relay online — commanding all coils OFF");
-            relay_modbus_all_off();
+            ESP_LOGI(TAG, "Relay online — commanding all coils OFF via Actuator Manager");
+            actuator_manager_all_off();
             dryer_controller_poll_fieldbus(&s_status);
         }
 
         ESP_LOGI(TAG,
-                 "hotair=%s/%.1fC chamber=%s/%.1fC relay=%s@%u elev=%d heat=%d fan=%d door=%d/%d",
+                 "hotair=%s/%.1fC chamber=%s/%.1fC moist=%s/%.1f%% ec=%s/%.2f "
+                 "relay=%s@%u elev=%d heat=%d fan=%d door=%d/%d",
                  s_status.hotair_ok ? "ok" : "fail", s_status.hotair_temp_c,
                  s_status.chamber_ok ? "ok" : "fail", s_status.chamber_temp_c,
-                 s_status.relay_ok ? "ok" : "fail", (unsigned)relay_modbus_address(),
+                 s_status.moisture_ok ? "ok" : "fail", s_status.moisture_pct,
+                 s_status.ec_ok ? "ok" : "fail", s_status.ec_value,
+                 s_status.relay_ok ? "ok" : "fail",
+                 (unsigned)actuator_manager_relay_address(),
                  (int)s_status.relay_elevator, (int)s_status.relay_heater,
                  (int)s_status.relay_fan,
                  (int)s_status.relay_door_open, (int)s_status.relay_door_close);
@@ -48,7 +52,7 @@ static void runtime_status_task(void *arg)
 
 extern "C" void app_main(void)
 {
-    ESP_LOGI(TAG, "Hybrid Solar Power Rice Dryer firmware starting (Phase 3)");
+    ESP_LOGI(TAG, "Hybrid Solar Power Rice Dryer firmware starting (Phase 4)");
 
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -70,5 +74,5 @@ extern "C" void app_main(void)
     }
 
     xTaskCreate(runtime_status_task, "runtime_status", 6144, nullptr, 3, nullptr);
-    ESP_LOGI(TAG, "Phase 3 running");
+    ESP_LOGI(TAG, "Phase 4 running");
 }

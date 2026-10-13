@@ -25,9 +25,10 @@ System Architecture       COMPLETE
 Hardware Design           COMPLETE
 Software Design           COMPLETE
 Implementation Plan       COMPLETE
-Firmware Phases 0–3       IN TREE
+Firmware Phases 0–4       IN TREE
 Phase 3 fieldbus bench    DEFERRED until probes and relay are wired
-Firmware Phase 4          NEXT
+Phase 4 hardware bench    OPEN (ADS1115 / moisture path)
+Firmware Phase 5          NEXT
 Hardware Integration      NOT STARTED
 Dry Run                   NOT STARTED
 Rice Validation           NOT STARTED
@@ -37,11 +38,11 @@ What exists today:
 
 - Design docs under `docs/01` through `docs/06`, summarized in [README.md](../README.md)
 - Waveshare board demo at [ESP32-S3-Touch-LCD-7B-Demo/15_LVGL_SLIDER](ESP32-S3-Touch-LCD-7B-Demo/15_LVGL_SLIDER), kept as a board reference
-- Product firmware under `firmware/` through Phase 3: board bring-up, TinyRTC, RS485/Modbus, XY-MD03 commissioning, N4D8B08 relay driver, and a bring-up HMI
+- Product firmware under `firmware/` through Phase 4: board bring-up, TinyRTC, RS485/Modbus, XY-MD03, N4D8B08, ADS1115, Sensor Manager, Actuator Manager, Manual Control HMI
 - GPIO and fieldbus map at [hardware/wiring/esp32-gpio-map.md](../hardware/wiring/esp32-gpio-map.md)
 - Placeholder folders for schematics, PCB, mechanical, calibration data, test results, and tests
 
-Next implementation step: **Phase 4 — ADS1115, moisture/EC, and Actuator Manager.**
+Next implementation step: **Phase 5 — Safety Manager, Settings, and Circulation.**
 
 ---
 
@@ -66,7 +67,7 @@ Keep the demo untouched as a board reference. Do not turn the demo into the prod
 
 # 3. What to Reuse from the Demo
 
-Create a new `firmware/` ESP-IDF project. Copy only board bring-up components.
+The product `firmware/` ESP-IDF project already exists. Board bring-up came from the demo components below; keep those reuse rules when extending drivers.
 
 | Component | Path | Reuse |
 |---|---|---|
@@ -221,19 +222,62 @@ Default process settings:
 
 ---
 
-# 6. Target Firmware Layout
+# 6. Firmware Layout
+
+## 6.1 As-built (Phases 0–4)
+
+Low-level drivers live under `firmware/components/`, not under `main/drivers/`.
 
 ```text
 firmware/
 ├── CMakeLists.txt
 ├── sdkconfig.defaults
-├── components/                  # Waveshare board drivers + new drivers
+├── components/
+│   ├── rgb_lcd_port/      # Waveshare
+│   ├── touch/
+│   ├── i2c/
+│   ├── io_extension/
+│   ├── lvgl_port/
+│   ├── sd/
+│   ├── gpio/
+│   ├── rs485/            # Phase 3
+│   ├── modbus/
+│   ├── rtc/
+│   ├── relay/
+│   └── ads1115/          # Phase 4
+└── main/
+    ├── main.cpp
+    ├── system_status.h
+    ├── board/
+    │   ├── board_hal.c/h
+    │   └── gpio_map.h
+    ├── app/
+    │   └── dryer_controller/   # bring-up + poll (not process FSM yet)
+    ├── services/
+    │   ├── th_sensor/          # XY-MD03 helper used by Sensor Manager
+    │   ├── sensor_manager/     # Phase 4 snapshot + NVS calibration
+    │   ├── actuator_manager/   # Phase 4 sole relay writer
+    │   └── rtc_manager/
+    └── ui/
+        └── ui_manager/         # Manual Control + commissioning HMI
+```
+
+## 6.2 Target end-state
+
+Add these as later phases land. Keep Phase 3 modules until replaced.
+
+```text
+firmware/
+├── CMakeLists.txt
+├── sdkconfig.defaults
+├── components/                  # Waveshare board drivers + product drivers
 │   ├── rgb_lcd_port/
 │   ├── touch/
 │   ├── i2c/
 │   ├── io_extension/
 │   ├── lvgl_port/
 │   ├── sd/
+│   ├── gpio/
 │   ├── rs485/
 │   ├── modbus/
 │   ├── ads1115/
@@ -241,23 +285,26 @@ firmware/
 │   └── relay/
 └── main/
     ├── main.cpp
+    ├── system_status.h
+    ├── board/
     ├── app/
     │   ├── dryer_controller/
-    │   ├── process_controller/
-    │   ├── safety_manager/
-    │   └── batch_manager/
+    │   ├── process_controller/   # Phase 6
+    │   ├── safety_manager/       # Phase 5
+    │   └── batch_manager/        # Phase 6
     ├── services/
+    │   ├── th_sensor/
     │   ├── sensor_manager/
-    │   ├── circulation_manager/
+    │   ├── circulation_manager/  # Phase 5
     │   ├── actuator_manager/
-    │   ├── settings_manager/
-    │   ├── logger/
+    │   ├── settings_manager/     # Phase 5
+    │   ├── logger/               # Phase 7
     │   ├── diagnostics/
-    │   ├── web_server/
+    │   ├── web_server/           # Phase 8
     │   └── rtc_manager/
     └── ui/
         ├── ui_manager/
-        ├── screens/
+        ├── screens/              # Phase 7 product HMI
         └── components/
 ```
 
@@ -317,7 +364,7 @@ IDLE -> PRECHECK -> DRYING -> COOLING -> DISCHARGING -> COMPLETE
 
 # 8. Build Order
 
-Phases 0–3 firmware is in the tree. Phase 3 fieldbus bench checks stay open until the XY-MD03 probes and the N4D8B08 relay are wired. Phase 4 firmware starts before that bench. Keep heater power disconnected until Phase 5 safety tests pass.
+Phases 0–4 firmware is in the tree. Phase 3 fieldbus bench checks stay open until the XY-MD03 probes and the N4D8B08 relay are wired. Phase 4 hardware bench (ADS1115 / moisture path) stays open until that hardware is connected. Phase 5 firmware is next. Keep heater power disconnected until Phase 5 safety tests pass.
 
 ## Phase 0 — Repository Skeleton
 
@@ -432,8 +479,11 @@ Status: firmware is in the tree (`rs485`, `modbus_rtu`, `th_sensor`, `relay_modb
 Deferred until the bus is wired:
 
 - Sensor setup must assign a lone factory-default probe. With another unit already answering, the first successful read can be rewritten to the new role.
-- Door OPEN/CLOSE/STOP should discover the relay the same way fan, elevator, and heater do, so a command is not dropped while the address is still unknown.
-- All-off must keep the last known coil state when the Modbus write fails.
+
+Resolved in Phase 4 Actuator Manager / relay driver:
+
+- Door OPEN/CLOSE/STOP discover the relay before writing (same path as fan/elevator/heater).
+- All-off keeps the last known coil state when the Modbus write fails.
 
 Relay map:
 
@@ -459,15 +509,17 @@ Acceptance:
 
 ## Phase 4 — ADS1115, Sensors, and Actuators
 
-Tasks:
+Status: firmware is in the tree (`ads1115`, `sensor_manager`, `actuator_manager`, Manual Control HMI via Actuator Manager, NVS linear calibration). Hardware acceptance below stays open until the ADS1115 and moisture/EC path are wired. Channel map as wired: **AIN2** moisture, **AIN3** EC.
+
+Tasks (done in firmware):
 
 1. Implement ADS1115 driver on the shared I2C bus
 2. Read moisture and EC channels
 3. Store linear calibration in NVS
 4. Publish one validated `SensorData` snapshot
 5. Implement Actuator Manager as the only relay writer
-6. Build Manual Control screen for fan, elevator, and door
-7. Test heater output into the SSR/contactor control input only
+6. Refactor bring-up HMI relay buttons behind Actuator Manager (Manual Control)
+7. Test heater output into the SSR/contactor control input only (bench — still open)
 
 Acceptance:
 
@@ -752,14 +804,12 @@ The project is ready for normal operation when:
 
 # 13. Immediate Next Step
 
-Start **Phase 4**:
+Start **Phase 5**:
 
-1. Implement the ADS1115 driver on the shared I2C bus (address `0x48` unless the ADDR pin says otherwise)
-2. Read moisture and EC channels and keep 0–5 V off every ESP32 pin
-3. Store linear calibration in NVS
-4. Publish one validated sensor snapshot
-5. Make Actuator Manager the only relay writer, and move the bring-up HMI relay buttons behind it
-6. Add the Manual Control screen for fan, elevator, and door
-7. Test the heater output only into the SSR/contactor control input
+1. Implement Safety Manager with heater-off authority over Actuator Manager
+2. Implement Settings Manager with validation and NVS persistence
+3. Implement Circulation Manager (continuous and interval, non-blocking)
+4. Define fault codes F001–F012 from the software design
+5. Keep Manual Control available for bench tests
 
-Phase 3 bus checks (unique XY-MD03 addresses, relay at 10, R4/R5 interlock on hardware) run when those devices are wired. Do not connect the high-power heater until Phase 5 safety tests pass.
+Phase 3 bus checks and Phase 4 ADS1115/moisture bench run when those devices are wired. Do not connect the high-power heater until Phase 5 safety tests pass.

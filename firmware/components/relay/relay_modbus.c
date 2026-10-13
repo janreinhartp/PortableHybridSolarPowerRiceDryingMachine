@@ -224,11 +224,17 @@ esp_err_t relay_modbus_all_off(void)
             }
         }
     }
-    s_state.elevator = false;
-    s_state.heater = false;
-    s_state.fan = false;
-    s_state.door_open = false;
-    s_state.door_close = false;
-    s_state.online = (last == ESP_OK);
+    /* Preserve last known coil state when the write fails. */
+    if (last == ESP_OK) {
+        s_state.elevator = false;
+        s_state.heater = false;
+        s_state.fan = false;
+        s_state.door_open = false;
+        s_state.door_close = false;
+        s_state.online = true;
+    } else {
+        s_state.online = false;
+        ESP_LOGW(TAG, "all_off failed — keeping last known coil state");
+    }
     return last;
 }

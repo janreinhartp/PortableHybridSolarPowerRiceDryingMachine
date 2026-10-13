@@ -471,7 +471,7 @@ Where limit switches are available, the controller should verify that the door i
 
 # 17. Temperature/Humidity Sensor Hardware
 
-Two **XY-MD03** RS485 Modbus temperature/humidity probes are used (PE probe, SHT40, 5–28 V, 9600 8N1). They have no address DIP. Product IDs are hot-air **1** and chamber **2**, written to holding register `0x0101` with only one probe on the bus. Wires: red VCC, black GND, yellow A, white B.
+Two RS485 Modbus temperature/humidity sensors are used.
 
 Suggested locations:
 
@@ -518,12 +518,11 @@ Conceptually:
         +-----------+-----------+
         |           |           |
         v           v           v
-     XY-MD03     XY-MD03     N4D8B08
+     Sensor 1    Sensor 2    Relay
      Address 1   Address 2   Address 10
-     Hot-air     Chamber     DIP A1+A3
 ```
 
-All devices must have unique Modbus addresses. The Waveshare board SP3485 uses automatic direction control on UART1 (GPIO16 TX, GPIO15 RX) at 9600 8N1. The relay board needs its own 12 V supply; RS485 A/B/GND does not power it.
+All devices must have unique Modbus addresses.
 
 ---
 
@@ -766,7 +765,7 @@ If the SD card fails:
 
 # 29. Relay Controller
 
-The system uses an **Eletechsup N4D8B08** 8-channel RS485 Modbus RTU relay controller at address **10** (DIP A0–A5 raw binary; A1+A3 ON). Protocol is FC03 read / FC06 write. Channel registers are `0x0001`–`0x0008`. Open is `0x0100`, close is `0x0200`, and close-all is register `0x0000` = `0x0800`.
+The system uses an 8-channel RS485 Modbus RTU relay controller.
 
 Initial mapping:
 
@@ -781,7 +780,15 @@ Initial mapping:
 | R7 | Spare | TBD |
 | R8 | Spare | TBD |
 
-The product Modbus address is **10**. Firmware may also recognize a board left at factory address 1 or at the common mis-set address 9, and the HMI should show the address it actually found. The installed board must be moved to 10 before both XY-MD03 probes are commissioned, because those probes use addresses 1 and 2.
+The relay controller shall use a unique Modbus address.
+
+Initial example:
+
+```text id="v9gc2q"
+Relay Address = 10
+```
+
+The final address shall be configurable if supported by the relay hardware.
 
 ---
 

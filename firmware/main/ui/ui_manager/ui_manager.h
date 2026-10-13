@@ -6,7 +6,7 @@
 extern "C" {
 #endif
 
-/** Create the Phase 3 status / fieldbus screen (call under lvgl_port_lock). */
+/** Create the Phase 4 Manual Control / sensor screen (call under lvgl_port_lock). */
 void ui_manager_show_foundation_screen(const system_status_t *status);
 
 /** Update live sensor / relay / RTC feedback (call under lvgl_port_lock). */

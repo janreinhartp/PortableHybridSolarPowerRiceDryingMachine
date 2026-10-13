@@ -898,15 +898,16 @@ System Architecture       COMPLETE
 Hardware Design           COMPLETE
 Software Design           COMPLETE
 Implementation Plan       COMPLETE
-Firmware Phases 0–3       IN TREE
+Firmware Phases 0–4       IN TREE
 Phase 3 fieldbus bench    DEFERRED until probes and relay are wired
-Firmware Phase 4          NEXT
+Phase 4 hardware bench    OPEN (ADS1115 / moisture path)
+Firmware Phase 5          NEXT
 Hardware Integration      NOT STARTED
 Dry Run                   NOT STARTED
 Rice Validation           NOT STARTED
 ```
 
-Firmware through RS485/Modbus is in `firmware/`. The next implementation step is Phase 4 (ADS1115, moisture/EC, and Actuator Manager) in [`docs/MASTERPLAN.md`](docs/MASTERPLAN.md).
+Firmware through Phase 4 (ADS1115, Sensor Manager, Actuator Manager, Manual Control) is in `firmware/`. The next implementation step is Phase 5 (Safety, Settings, Circulation) in [`docs/MASTERPLAN.md`](docs/MASTERPLAN.md).
 
 ---
 
@@ -1162,7 +1163,7 @@ PortableHybridSolarPowerRiceDryingMachine/
 │   ├── 06-implementation-plan.md
 │   └── ESP32-S3-Touch-LCD-7B-Demo/
 │
-├── firmware/          ESP-IDF project (Phases 0–3)
+├── firmware/          ESP-IDF project (Phases 0–4)
 │   ├── CMakeLists.txt
 │   ├── components/
 │   └── main/
@@ -1187,14 +1188,13 @@ PortableHybridSolarPowerRiceDryingMachine/
 
 # 35. Getting Started
 
-Firmware through Modbus is already in `firmware/`. Continue with:
+Firmware through Phase 4 is already in `firmware/`. Continue with:
 
 ```text
-1. Phase 4 — ADS1115 on the shared I2C bus
-2. Moisture and EC conversion, with calibration in NVS
-3. Actuator Manager as the only relay writer
-4. Manual Control screen for fan, elevator, and door
-5. When the bus is wired: commission XY-MD03 probes (hot-air 1, chamber 2) and confirm the N4D8B08 at address 10
+1. Phase 5 — Safety Manager (heater-off authority)
+2. Settings Manager with validation and NVS persistence
+3. Circulation Manager (continuous and interval)
+4. When the bus / ADS1115 are wired: finish Phase 3–4 hardware bench checks
 ```
 
 Do not connect the high-power heater until Phase 5 safety tests pass.
@@ -1207,16 +1207,14 @@ Follow the execution order in:
 
 [`docs/MASTERPLAN.md`](docs/MASTERPLAN.md)
 
-Phases 0–3 firmware is in the tree (board bring-up, RTC, RS485/Modbus, XY-MD03 commissioning, N4D8B08 relay driver). Phase 3 bench checks wait until the probes and relay are wired.
+Phases 0–4 firmware is in the tree (board bring-up, RTC, RS485/Modbus, ADS1115, Sensor Manager, Actuator Manager, Manual Control). Phase 3–4 bench checks wait until probes, relay, and the moisture path are wired.
 
-The next milestone is Phase 4:
+The next milestone is Phase 5:
 
 ```text
-ADS1115
+Safety Manager
    +
-Moisture / EC
+Settings Manager
    +
-Actuator Manager
-   +
-Manual Control screen
+Circulation Manager
 ```

@@ -144,11 +144,10 @@ Responsibilities:
 - Monitor actuator faults
 - Monitor communication faults
 - Monitor temperature limits
+- Monitor emergency stop status
 - Prevent unsafe heater operation
 - Force safe actuator states
 - Generate fault conditions
-
-Emergency stop is implemented electrically at the panel main contactor and is not an ESP32 input. After power returns, software must remain in a safe commanded state until the operator confirms restart.
 
 Safety Manager output has priority over normal process commands.
 
@@ -179,17 +178,32 @@ There is no software-controlled loading stage.
 
 # 4. Service Modules
 
+As-built after Phase 4:
+
 ```text
 services/
-├── sensor_manager/
-├── circulation_manager/
-├── actuator_manager/
-├── settings_manager/
-├── logger/
-├── diagnostics/
-├── web_server/
+├── th_sensor/              # XY-MD03 Modbus helper
+├── sensor_manager/         # validated SensorData snapshot + NVS calibration
+├── actuator_manager/       # only relay writer
 └── rtc_manager/
 ```
+
+Target services (add in later phases):
+
+```text
+services/
+├── th_sensor/
+├── sensor_manager/
+├── circulation_manager/    # Phase 5
+├── actuator_manager/
+├── settings_manager/       # Phase 5
+├── logger/                 # Phase 7
+├── diagnostics/
+├── web_server/             # Phase 8
+└── rtc_manager/
+```
+
+`th_sensor/` remains the low-level XY-MD03 helper. Sensor Manager owns the combined T/H + ADS1115 moisture/EC snapshot.
 
 ---
 
@@ -276,24 +290,6 @@ The software should support:
 - Device offline detection
 
 The system must not block the main process controller while waiting for a Modbus response.
-
-Locked fieldbus (implemented in Phase 3 firmware):
-
-| Addr | Device | Notes |
-|---:|---|---|
-| 1 | XY-MD03 hot-air | No DIP. Address holding register `0x0101` |
-| 2 | XY-MD03 chamber | Same register map |
-| 10 | N4D8B08 relay | DIP A1+A3 ON. FC03/FC06 holding registers |
-
-Bus settings: UART1, GPIO16 TX / GPIO15 RX, onboard auto-DE, **9600 8N1**.
-
-XY-MD03 read: function **0x04**, start register **0x0001**, count 2 (temperature ×10, humidity ×10).
-
-N4D8B08 channel registers **0x0001–0x0008**. Command words: open `0x0100`, close `0x0200`, close-all on register `0x0000` = `0x0800`.
-
-Relay map: R1 elevator, R2 heater, R3 fan, R4 door open, R5 door close. R4 and R5 must never both be ON.
-
-Phase 4 replaces direct HMI writes to the relay driver with the Actuator Manager.
 
 ---
 
@@ -522,11 +518,11 @@ Checks may include:
 - RTC available
 - SD card available
 - No active fault
-- Control power available after any electrical E-stop / contactor reset
+- Emergency stop released
+- Door in safe position
 - Heater initially OFF
 - Elevator initially OFF
 - Fan initially OFF
-- Door relays initially OFF (actuator internal limits handle travel end)
 
 If all required conditions are valid:
 
@@ -921,15 +917,14 @@ R5 != ON
 
 at the same time.
 
-Door travel ends on the linear actuator’s internal limit switches. The ESP32 does not receive door-position feedback.
+If door position sensors are added, the software should use them to verify:
 
-Software still must:
+- Fully open
+- Fully closed
+- Moving
+- Unknown position
 
-- Never energize door OPEN and CLOSE relays together
-- Use process timing for discharge sequencing
-- Leave the door relays in a safe commanded state after faults
-
-A door command timeout may still generate a fault when sequencing requires it, even without position feedback.
+A door timeout should generate a fault.
 
 ---
 
@@ -973,17 +968,15 @@ FAULT is entered when a critical condition occurs.
 Examples:
 
 - Overtemperature
+- Emergency stop
 - Sensor failure
 - Moisture sensor failure
 - Modbus communication failure
 - Elevator timeout
-- Door command timeout
+- Door timeout
 - SD card failure where logging is mandatory
 - Maximum drying time exceeded
 - Invalid actuator state
-- Power loss / recovery requiring operator confirmation
-
-Note: panel emergency stop is electrical (main contactor). Software does not receive an E-stop GPIO; it recovers safely after power returns.
 
 Default safe behavior:
 
@@ -1789,63 +1782,81 @@ The software must enforce:
 
 # 59. Software Project Structure
 
-Recommended project structure:
+Low-level drivers live under `firmware/components/` (ESP-IDF components), not under `main/drivers/`. Application, services, board HAL, and UI live under `firmware/main/`.
+
+### As-built (Phases 0–4)
 
 ```text
-main/
-│
-├── app/
-│   ├── dryer_controller/
-│   │   ├── dryer_controller.cpp
-│   │   └── dryer_controller.h
-│   │
-│   ├── process_controller/
-│   │   ├── process_controller.cpp
-│   │   └── process_controller.h
-│   │
-│   ├── safety_manager/
-│   │   ├── safety_manager.cpp
-│   │   └── safety_manager.h
-│   │
-│   └── batch_manager/
-│       ├── batch_manager.cpp
-│       └── batch_manager.h
-│
-├── services/
-│   ├── sensor_manager/
-│   ├── circulation_manager/
-│   ├── actuator_manager/
-│   ├── settings_manager/
-│   ├── logger/
-│   ├── diagnostics/
-│   ├── web_server/
-│   └── rtc_manager/
-│
-├── drivers/
+firmware/
+├── components/                 # Waveshare + product drivers
+│   ├── rgb_lcd_port/
+│   ├── touch/
+│   ├── i2c/
+│   ├── io_extension/
+│   ├── lvgl_port/
+│   ├── sd/
+│   ├── gpio/
 │   ├── rs485/
 │   ├── modbus/
-│   ├── ads1115/
 │   ├── rtc/
-│   ├── sd/
-│   └── relay/
-│
-├── ui/
-│   ├── screens/
-│   │   ├── dashboard/
-│   │   ├── batch_setup/
-│   │   ├── drying/
-│   │   ├── cooling/
-│   │   ├── discharge/
-│   │   ├── manual_control/
-│   │   ├── history/
-│   │   ├── settings/
-│   │   ├── alarms/
-│   │   └── system_info/
-│   │
-│   ├── components/
-│   └── ui_manager/
-│
-└── main.cpp
+│   ├── relay/
+│   └── ads1115/
+└── main/
+    ├── main.cpp
+    ├── system_status.h
+    ├── board/
+    │   ├── board_hal.c/h
+    │   └── gpio_map.h
+    ├── app/
+    │   └── dryer_controller/   # bring-up + poll; not process FSM yet
+    ├── services/
+    │   ├── th_sensor/
+    │   ├── sensor_manager/
+    │   ├── actuator_manager/
+    │   └── rtc_manager/
+    └── ui/
+        └── ui_manager/         # Manual Control + commissioning HMI
+```
+
+### Target end-state (later phases)
+
+```text
+firmware/
+├── components/
+│   └── ...existing (including ads1115)...
+└── main/
+    ├── main.cpp
+    ├── system_status.h
+    ├── board/
+    ├── app/
+    │   ├── dryer_controller/
+    │   ├── process_controller/   # Phase 6 — planned
+    │   ├── safety_manager/       # Phase 5 — planned
+    │   └── batch_manager/        # Phase 6 — planned
+    ├── services/
+    │   ├── th_sensor/
+    │   ├── sensor_manager/
+    │   ├── circulation_manager/  # Phase 5 — planned
+    │   ├── actuator_manager/
+    │   ├── settings_manager/     # Phase 5 — planned
+    │   ├── logger/               # Phase 7 — planned
+    │   ├── diagnostics/          # planned
+    │   ├── web_server/           # Phase 8 — planned
+    │   └── rtc_manager/
+    └── ui/
+        ├── ui_manager/
+        ├── screens/              # Phase 7 product HMI — planned
+        │   ├── dashboard/
+        │   ├── batch_setup/
+        │   ├── drying/
+        │   ├── cooling/
+        │   ├── discharge/
+        │   ├── manual_control/
+        │   ├── history/
+        │   ├── settings/
+        │   ├── alarms/
+        │   └── system_info/
+        └── components/
 ```
 
 ---
@@ -2003,13 +2014,12 @@ Fault ACTIVE
 
 ### Emergency Stop
 
-Emergency stop is electrical (main contactor drop). Expected when power/control returns:
+Expected:
 
 ```text
 Heater OFF
 Elevator OFF
-Fan OFF
-Operator confirmation required before batch restart
+Fault ACTIVE
 ```
 
 ### Moisture Sensor Failure
@@ -2102,7 +2112,7 @@ Possible future features:
 - More advanced moisture estimation
 - Additional temperature sensors
 - Additional EC analysis
-- Optional external door position sensors (not required; actuator has internal limits)
+- Door position sensors
 - Motor feedback
 - Remote monitoring
 - Web-based configuration

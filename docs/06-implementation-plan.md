@@ -6,7 +6,7 @@ This document defines the implementation plan for the 10 kg/batch Hybrid Solar P
 
 The implementation will follow an incremental approach.
 
-Execution order and locked decisions live in [`MASTERPLAN.md`](MASTERPLAN.md). That plan is the status source. As of the Phase 3 firmware landing:
+Execution order and locked decisions live in [`MASTERPLAN.md`](MASTERPLAN.md). That plan is the status source. As of the Phase 4 firmware landing:
 
 | Master-plan phase | State |
 |---|---|
@@ -14,9 +14,10 @@ Execution order and locked decisions live in [`MASTERPLAN.md`](MASTERPLAN.md). T
 | 1 Board foundation | Firmware in the tree; board checks still open |
 | 2 GPIO map and TinyRTC | Map done; RTC bench check still open |
 | 3 RS485 and Modbus | Firmware in the tree; bus bench deferred until the XY-MD03 probes and N4D8B08 are wired |
-| 4 ADS1115, sensors, actuators | **Next** |
+| 4 ADS1115, sensors, actuators | Firmware in the tree; ADS1115/moisture bench still open |
+| 5 Safety, settings, circulation | **Next** |
 
-The numbered phases below are the detailed checklist. They use a finer split than the master plan (this document's "Phase 3" is the Sensor Manager, which is master-plan Phase 4 work). Do not treat an unchecked box here as a reason to redo Phases 0–3 firmware.
+The numbered phases below are the detailed checklist. They use a finer split than the master plan (this document's "Phase 3" Sensor Manager and "Phase 4" Actuator Manager map to master-plan Phase 4). Do not treat an unchecked box here as a reason to redo Phases 0–4 firmware.
 
 Each subsystem will be developed and tested independently before full system integration.
 
@@ -93,16 +94,17 @@ Each stage should have a working test before moving to the next stage.
 
 Create the base ESP-IDF project and establish the software structure.
 
+Firmware for this phase is already in `firmware/` (ESP-IDF, not PlatformIO). Board acceptance checkboxes below remain hardware checks. Status source: [`MASTERPLAN.md`](MASTERPLAN.md). Local Wi-Fi belongs to master-plan Phase 8 / this document's web-dashboard phase — not foundation.
+
 ### Tasks
 
 - Create ESP-IDF project
 - Configure Waveshare ESP32-S3 Touch LCD 7B
-- Configure PlatformIO or selected ESP-IDF development environment
+- Configure ESP-IDF development environment
 - Configure C++ support
 - Configure FreeRTOS
 - Configure LVGL
 - Configure SD card
-- Configure Wi-Fi
 - Create project folder structure
 - Configure logging
 - Create basic error-handling system
@@ -116,7 +118,6 @@ The ESP32-S3 should:
 - Initialize the display
 - Start LVGL
 - Detect the SD card
-- Initialize Wi-Fi
 - Display system information
 
 ### Acceptance Criteria
@@ -127,7 +128,6 @@ The ESP32-S3 should:
 [ ] Touch input works
 [ ] LVGL works
 [ ] SD card detected
-[ ] Wi-Fi starts
 [ ] Serial logging works
 ```
 

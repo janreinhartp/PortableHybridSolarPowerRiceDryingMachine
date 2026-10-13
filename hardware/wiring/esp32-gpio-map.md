@@ -27,7 +27,7 @@ Bus: **I2C0** — SDA `GPIO8`, SCL `GPIO9`, 400 kHz (RTC device uses 100 kHz).
 | `0x5D` / `0x14` | GT911 touch | Address depends on INT strap at reset |
 | `0x24` | IO expander | Backlight, resets, SD select |
 | `0x68` | TinyRTC (DS1307) | Must not collide |
-| `0x48` | ADS1115 (planned) | Phase 4 — ADDR pin default |
+| `0x48` | ADS1115 | Phase 4 — ADDR pin default; **AIN2** moisture / **AIN3** EC (as wired) |
 
 Do not add a second I2C controller.
 

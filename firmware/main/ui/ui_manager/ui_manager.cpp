@@ -3,9 +3,9 @@
 #include <cstdio>
 #include <cstring>
 
+#include "actuator_manager.h"
 #include "esp_log.h"
 #include "lvgl.h"
-#include "relay_modbus.h"
 #include "th_sensor.h"
 
 static const char *TAG_UI = "ui";
@@ -41,8 +41,8 @@ static void on_fan_toggle(lv_event_t *e)
         return;
     }
     relay_state_t st {};
-    relay_modbus_refresh(&st);
-    relay_modbus_set_fan(!st.fan);
+    actuator_manager_refresh(&st);
+    actuator_manager_set_fan(!st.fan);
 }
 
 static void on_elev_toggle(lv_event_t *e)
@@ -51,8 +51,8 @@ static void on_elev_toggle(lv_event_t *e)
         return;
     }
     relay_state_t st {};
-    relay_modbus_refresh(&st);
-    relay_modbus_set_elevator(!st.elevator);
+    actuator_manager_refresh(&st);
+    actuator_manager_set_elevator(!st.elevator);
 }
 
 static void on_heater_toggle(lv_event_t *e)
@@ -61,9 +61,9 @@ static void on_heater_toggle(lv_event_t *e)
         return;
     }
     relay_state_t st {};
-    relay_modbus_refresh(&st);
-    /* Control-line test only — keep heater power disconnected in Phase 3. */
-    relay_modbus_set_heater(!st.heater);
+    actuator_manager_refresh(&st);
+    /* Control-line test only — keep heater power disconnected until Phase 5. */
+    actuator_manager_set_heater(!st.heater);
 }
 
 static void on_door_open(lv_event_t *e)
@@ -71,7 +71,7 @@ static void on_door_open(lv_event_t *e)
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
         return;
     }
-    relay_modbus_open_door();
+    actuator_manager_open_door();
 }
 
 static void on_door_close(lv_event_t *e)
@@ -79,7 +79,7 @@ static void on_door_close(lv_event_t *e)
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
         return;
     }
-    relay_modbus_close_door();
+    actuator_manager_close_door();
 }
 
 static void on_door_stop(lv_event_t *e)
@@ -87,7 +87,7 @@ static void on_door_stop(lv_event_t *e)
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
         return;
     }
-    relay_modbus_stop_door();
+    actuator_manager_stop_door();
 }
 
 static void on_all_off(lv_event_t *e)
@@ -95,7 +95,7 @@ static void on_all_off(lv_event_t *e)
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
         return;
     }
-    relay_modbus_all_off();
+    actuator_manager_all_off();
 }
 
 static void set_setup_msg(const char *msg)
@@ -183,13 +183,13 @@ void ui_manager_show_foundation_screen(const system_status_t *status)
     lv_obj_set_style_bg_color(scr, lv_color_hex(0x1B2838), 0);
 
     lv_obj_t *title = lv_label_create(scr);
-    lv_label_set_text(title, "Rice Dryer — Phase 3");
+    lv_label_set_text(title, "Rice Dryer — Phase 4");
     lv_obj_set_style_text_color(title, lv_color_hex(0xF2F5F8), 0);
     lv_obj_set_style_text_font(title, &lv_font_montserrat_24, 0);
     lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 12);
 
     lv_obj_t *subtitle = lv_label_create(scr);
-    lv_label_set_text(subtitle, "RS485 / Modbus  |  heater power stay disconnected");
+    lv_label_set_text(subtitle, "Manual Control via Actuator Mgr  |  heater power stay disconnected");
     lv_obj_set_style_text_color(subtitle, lv_color_hex(0x9BB0C4), 0);
     lv_obj_set_style_text_font(subtitle, &lv_font_montserrat_14, 0);
     lv_obj_align(subtitle, LV_ALIGN_TOP_MID, 0, 44);
@@ -202,26 +202,26 @@ void ui_manager_show_foundation_screen(const system_status_t *status)
     s_sensor_label = lv_label_create(scr);
     lv_obj_set_style_text_color(s_sensor_label, lv_color_hex(0x7DCFB6), 0);
     lv_obj_set_style_text_font(s_sensor_label, &lv_font_montserrat_16, 0);
-    lv_obj_align(s_sensor_label, LV_ALIGN_TOP_LEFT, 32, 150);
+    lv_obj_align(s_sensor_label, LV_ALIGN_TOP_LEFT, 32, 140);
 
     s_relay_label = lv_label_create(scr);
     lv_obj_set_style_text_color(s_relay_label, lv_color_hex(0xF0C808), 0);
     lv_obj_set_style_text_font(s_relay_label, &lv_font_montserrat_16, 0);
-    lv_obj_align(s_relay_label, LV_ALIGN_TOP_LEFT, 32, 230);
+    lv_obj_align(s_relay_label, LV_ALIGN_TOP_LEFT, 32, 250);
 
     s_rtc_label = lv_label_create(scr);
     lv_obj_set_style_text_color(s_rtc_label, lv_color_hex(0x9BB0C4), 0);
     lv_obj_set_style_text_font(s_rtc_label, &lv_font_montserrat_14, 0);
-    lv_obj_align(s_rtc_label, LV_ALIGN_TOP_LEFT, 32, 300);
+    lv_obj_align(s_rtc_label, LV_ALIGN_TOP_LEFT, 32, 310);
 
     s_setup_label = lv_label_create(scr);
     lv_obj_set_style_text_color(s_setup_label, lv_color_hex(0xF2A65A), 0);
     lv_obj_set_style_text_font(s_setup_label, &lv_font_montserrat_14, 0);
-    lv_obj_align(s_setup_label, LV_ALIGN_TOP_LEFT, 32, 340);
+    lv_obj_align(s_setup_label, LV_ALIGN_TOP_LEFT, 32, 350);
     lv_label_set_text(s_setup_label,
                       "Sensor setup: move relay DIP to 10, wire ONE XY-MD03, then assign");
 
-    /* Row 1 */
+    /* Row 1 — Manual Control (via Actuator Manager) */
     lv_obj_t *b1 = make_btn(scr, "Fan", on_fan_toggle, 120);
     lv_obj_align(b1, LV_ALIGN_BOTTOM_LEFT, 24, -84);
     lv_obj_t *b2 = make_btn(scr, "Elevator", on_elev_toggle, 130);
@@ -255,21 +255,22 @@ void ui_manager_update_runtime(const system_status_t *status, unsigned touch_tap
     }
 
     if (s_status_box != nullptr) {
-        char line[160];
+        char line[192];
         snprintf(line, sizeof(line),
-                 "Disp %s  Touch %s  SD %s  RTC %s  RS485 %s  Relay %s  taps %u",
+                 "Disp %s  Touch %s  SD %s  RTC %s  RS485 %s  Relay %s  ADS %s  taps %u",
                  ok_fail(status->display_ok),
                  ok_fail(status->touch_ok),
                  ok_fail(status->sd_ok),
                  ok_fail(status->rtc_ok),
                  ok_fail(status->rs485_ok),
                  ok_fail(status->relay_ok),
+                 ok_fail(status->ads1115_ok),
                  touch_taps);
         lv_label_set_text(s_status_box, line);
     }
 
     if (s_sensor_label != nullptr) {
-        char line[192];
+        char line[280];
         if (status->hotair_ok) {
             snprintf(line, sizeof(line), "Hot-air  #%u : %.1f C   %.1f %%RH\n",
                      1, status->hotair_temp_c, status->hotair_rh);
@@ -278,12 +279,27 @@ void ui_manager_update_runtime(const system_status_t *status, unsigned touch_tap
         }
         char chamber[96];
         if (status->chamber_ok) {
-            snprintf(chamber, sizeof(chamber), "Chamber #%u : %.1f C   %.1f %%RH",
+            snprintf(chamber, sizeof(chamber), "Chamber #%u : %.1f C   %.1f %%RH\n",
                      2, status->chamber_temp_c, status->chamber_rh);
         } else {
-            snprintf(chamber, sizeof(chamber), "Chamber #%u : OFFLINE", 2);
+            snprintf(chamber, sizeof(chamber), "Chamber #%u : OFFLINE\n", 2);
         }
         strncat(line, chamber, sizeof(line) - strlen(line) - 1);
+
+        char analog[128];
+        if (status->moisture_ok || status->ec_ok) {
+            snprintf(analog, sizeof(analog),
+                     "Moisture %s %.1f%% (%.2fV)   EC %s %.2f (%.2fV)",
+                     status->moisture_ok ? "OK" : "FAIL",
+                     status->moisture_pct, status->moisture_voltage,
+                     status->ec_ok ? "OK" : "FAIL",
+                     status->ec_value, status->ec_voltage);
+        } else if (status->ads1115_ok) {
+            snprintf(analog, sizeof(analog), "Moisture/EC : ADS online, reading invalid");
+        } else {
+            snprintf(analog, sizeof(analog), "Moisture/EC : ADS1115 OFFLINE");
+        }
+        strncat(line, analog, sizeof(line) - strlen(line) - 1);
         lv_label_set_text(s_sensor_label, line);
     }
 

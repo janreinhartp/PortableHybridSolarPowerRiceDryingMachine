@@ -1,11 +1,13 @@
 #include "dryer_controller.h"
 
+#include "actuator_manager.h"
 #include "board_hal.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "modbus_rtu.h"
 #include "relay_modbus.h"
 #include "rtc_manager.h"
+#include "sensor_manager.h"
 #include "th_sensor.h"
 
 static const char *TAG = "dryer_ctrl";
@@ -41,7 +43,7 @@ esp_err_t dryer_controller_init(system_status_t *status)
     *status = {};
     refresh_heap(status);
 
-    ESP_LOGI(TAG, "Phase 3 bring-up starting");
+    ESP_LOGI(TAG, "Phase 4 bring-up starting");
 
     board_hal_status_t board {};
     esp_err_t err = board_hal_init(&board);
@@ -67,6 +69,10 @@ esp_err_t dryer_controller_init(system_status_t *status)
         ESP_LOGW(TAG, "RTC init failed: %s", esp_err_to_name(rtc_err));
     }
 
+    /* ADS1115 + calibration after shared I2C is up (touch bring-up). */
+    sensor_manager_init();
+    status->ads1115_ok = false;
+
     esp_err_t bus_err = modbus_rtu_init();
     status->rs485_ok = (bus_err == ESP_OK);
     if (bus_err != ESP_OK) {
@@ -74,14 +80,14 @@ esp_err_t dryer_controller_init(system_status_t *status)
     } else {
         th_sensor_init();
         relay_modbus_init();
-        /* Fieldbus poll deferred to runtime task — no Modbus timeouts in app_main. */
+        actuator_manager_init();
         status->relay_ok = false;
         status->hotair_ok = false;
         status->chamber_ok = false;
     }
 
     refresh_heap(status);
-    ESP_LOGI(TAG, "Bring-up done rtc=%s rs485=%s heap=%u (fieldbus probe deferred)",
+    ESP_LOGI(TAG, "Bring-up done rtc=%s rs485=%s heap=%u",
              status->rtc_ok ? "ok" : "fail",
              status->rs485_ok ? "ok" : "fail",
              (unsigned)status->free_heap);
@@ -103,32 +109,28 @@ void dryer_controller_poll_fieldbus(system_status_t *status)
         return;
     }
 
-    /* Discover relay first so we can skip T/H polls that collide with its ID
-     * (R4D8A08 with all address DIPs OFF answers as slave 1). */
     relay_state_t relays {};
-    status->relay_ok = (relay_modbus_refresh(&relays) == ESP_OK);
-    const uint8_t relay_addr = relay_modbus_address();
+    status->relay_ok = (actuator_manager_refresh(&relays) == ESP_OK);
+    const uint8_t relay_addr = actuator_manager_relay_address();
 
-    th_reading_t hotair {};
-    th_reading_t chamber {};
-    if (relay_addr != 0 && relay_addr == TH_SENSOR_HOTAIR_ADDR) {
-        status->hotair_ok = false;
-        status->hotair_temp_c = 0.0f;
-        status->hotair_rh = 0.0f;
-    } else {
-        status->hotair_ok = (th_sensor_read(TH_SENSOR_HOTAIR_ADDR, &hotair) == ESP_OK);
-        status->hotair_temp_c = hotair.temperature_c;
-        status->hotair_rh = hotair.humidity_rh;
-    }
-    if (relay_addr != 0 && relay_addr == TH_SENSOR_CHAMBER_ADDR) {
-        status->chamber_ok = false;
-        status->chamber_temp_c = 0.0f;
-        status->chamber_rh = 0.0f;
-    } else {
-        status->chamber_ok = (th_sensor_read(TH_SENSOR_CHAMBER_ADDR, &chamber) == ESP_OK);
-        status->chamber_temp_c = chamber.temperature_c;
-        status->chamber_rh = chamber.humidity_rh;
-    }
+    sensor_manager_poll(relay_addr);
+    sensor_data_t sensors {};
+    sensor_manager_get(&sensors);
+
+    status->hotair_ok = sensors.hot_air_temp_valid;
+    status->hotair_temp_c = sensors.hot_air_temperature;
+    status->hotair_rh = sensors.hot_air_humidity;
+    status->chamber_ok = sensors.chamber_temp_valid;
+    status->chamber_temp_c = sensors.chamber_temperature;
+    status->chamber_rh = sensors.chamber_humidity;
+    status->ads1115_ok = sensors.ads1115_ok;
+    status->moisture_ok = sensors.moisture_valid;
+    status->ec_ok = sensors.ec_valid;
+    status->moisture_pct = sensors.moisture;
+    status->ec_value = sensors.ec;
+    status->moisture_voltage = sensors.moisture_voltage;
+    status->ec_voltage = sensors.ec_voltage;
+
     status->relay_elevator = relays.elevator;
     status->relay_heater = relays.heater;
     status->relay_fan = relays.fan;

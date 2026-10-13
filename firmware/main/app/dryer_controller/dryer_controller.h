@@ -4,7 +4,7 @@
 #include "system_status.h"
 
 /**
- * Board bring-up plus fieldbus (RS485/Modbus) coordination.
+ * Board bring-up plus Sensor/Actuator Manager and fieldbus coordination.
  */
 esp_err_t dryer_controller_init(system_status_t *status);
 void dryer_controller_refresh_heap(system_status_t *status);

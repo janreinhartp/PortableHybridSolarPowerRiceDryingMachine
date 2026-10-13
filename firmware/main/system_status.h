@@ -18,6 +18,7 @@ typedef struct {
     bool hotair_ok;
     bool chamber_ok;
     bool relay_ok;
+    bool ads1115_ok;
     size_t sd_total_mb;
     size_t sd_free_mb;
     size_t free_heap;
@@ -32,6 +33,12 @@ typedef struct {
     float hotair_rh;
     float chamber_temp_c;
     float chamber_rh;
+    float moisture_pct;
+    float ec_value;
+    float moisture_voltage;
+    float ec_voltage;
+    bool moisture_ok;
+    bool ec_ok;
     bool relay_elevator;
     bool relay_heater;
     bool relay_fan;
