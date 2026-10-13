@@ -1,11 +1,13 @@
 #include "dryer_controller.h"
 
 #include "actuator_manager.h"
+#include "batch_manager.h"
 #include "board_hal.h"
 #include "circulation_manager.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "modbus_rtu.h"
+#include "process_controller.h"
 #include "relay_modbus.h"
 #include "rtc_manager.h"
 #include "safety_manager.h"
@@ -46,7 +48,7 @@ esp_err_t dryer_controller_init(system_status_t *status)
     *status = {};
     refresh_heap(status);
 
-    ESP_LOGI(TAG, "Phase 5 bring-up starting");
+    ESP_LOGI(TAG, "Phase 6 bring-up starting");
 
     board_hal_status_t board {};
     esp_err_t err = board_hal_init(&board);
@@ -85,6 +87,9 @@ esp_err_t dryer_controller_init(system_status_t *status)
         circulation_manager_configure(&cfg);
     }
 
+    batch_manager_init();
+    process_controller_init();
+
     esp_err_t bus_err = modbus_rtu_init();
     status->rs485_ok = (bus_err == ESP_OK);
     if (bus_err != ESP_OK) {
@@ -96,6 +101,8 @@ esp_err_t dryer_controller_init(system_status_t *status)
         status->relay_ok = false;
         status->hotair_ok = false;
         status->chamber_ok = false;
+        /* Safe outputs again after actuator init (Process already requested). */
+        process_controller_init();
     }
 
     refresh_heap(status);
@@ -147,11 +154,13 @@ void dryer_controller_poll_fieldbus(system_status_t *status)
     settings_manager_get(&settings);
     safety_manager_evaluate(&sensors, &settings, status->relay_ok, status->rtc_ok);
 
+    process_controller_tick(&sensors, &settings, status);
+
     if (circulation_manager_is_active()) {
         circulation_manager_tick();
     }
 
-    /* Refresh coils after safety / circulation may have written. */
+    /* Refresh coils after safety / process / circulation may have written. */
     if (status->relay_ok) {
         actuator_manager_refresh(&relays);
     } else {

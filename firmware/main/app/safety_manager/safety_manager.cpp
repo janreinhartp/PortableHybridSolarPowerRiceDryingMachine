@@ -107,6 +107,13 @@ void safety_manager_evaluate(const sensor_data_t *sensors,
     const bool temps_ok =
         sensors->hot_air_temp_valid && sensors->chamber_temp_valid;
 
+    const bool sticky_process_fault =
+        (s_status.active_fault == FAULT_F010_MAX_DRYING_TIME ||
+         s_status.active_fault == FAULT_F012_INVALID_CONFIGURATION ||
+         s_status.active_fault == FAULT_F007_ELEVATOR_TIMEOUT ||
+         s_status.active_fault == FAULT_F008_DOOR_TIMEOUT ||
+         s_status.active_fault == FAULT_F009_SD_CARD_ERROR);
+
     if (!relay_ok) {
         set_fault(FAULT_F006_MODBUS_COMMUNICATION);
     } else if (!sensors->hot_air_temp_valid) {
@@ -117,12 +124,14 @@ void safety_manager_evaluate(const sensor_data_t *sensors,
         set_fault(FAULT_F003_MOISTURE_SENSOR);
     } else if (!rtc_ok) {
         set_fault(FAULT_F011_RTC_ERROR);
-    } else {
+    } else if (!sticky_process_fault) {
         s_status.active_fault = FAULT_NONE;
         s_status.fault_timestamp_ms = 0;
     }
 
-    s_status.heating_permitted = temps_ok && relay_ok;
+    s_status.heating_permitted =
+        temps_ok && relay_ok && !sticky_process_fault &&
+        s_status.active_fault != FAULT_F010_MAX_DRYING_TIME;
 
     if (!s_status.heating_permitted) {
         actuator_manager_force_heater_off();
@@ -158,6 +167,23 @@ esp_err_t safety_manager_acknowledge(void)
     s_overtemp_latched = false;
     s_status.active_fault = FAULT_NONE;
     s_status.fault_timestamp_ms = 0;
+    return ESP_OK;
+}
+
+esp_err_t safety_manager_raise_fault(fault_code_t code)
+{
+    if (code == FAULT_NONE) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (s_overtemp_latched && code != FAULT_F001_OVER_TEMPERATURE) {
+        ESP_LOGW(TAG, "raise_fault(%s) ignored — over-temp latched",
+                 safety_manager_fault_name(code));
+        return ESP_ERR_INVALID_STATE;
+    }
+    set_fault(code);
+    actuator_manager_force_heater_off();
+    s_status.heater_forced_off = true;
+    s_status.heating_permitted = false;
     return ESP_OK;
 }
 

@@ -31,7 +31,7 @@ Phase 2 RTC bench         COMPLETE
 Phase 3 fieldbus bench    COMPLETE (2× XY-MD03 + N4D8B08)
 Phase 4 moisture/EC bench COMPLETE (ADS1115 path)
 Firmware Phase 5          IN TREE
-Firmware Phase 6          NEXT
+Firmware Phase 6          IN TREE
 Hardware Integration      NOT STARTED
 Dry Run                   NOT STARTED
 Rice Validation           NOT STARTED
@@ -41,11 +41,11 @@ What exists today:
 
 - Design docs under `docs/01` through `docs/06`, summarized in [README.md](../README.md)
 - Waveshare board demo at [ESP32-S3-Touch-LCD-7B-Demo/15_LVGL_SLIDER](ESP32-S3-Touch-LCD-7B-Demo/15_LVGL_SLIDER), kept as a board reference
-- Product firmware under `firmware/` through Phase 5: board bring-up, TinyRTC, RS485/Modbus, XY-MD03, N4D8B08, ADS1115, Sensor Manager, Actuator Manager, Safety Manager, Settings Manager, Circulation Manager, Manual Control HMI
+- Product firmware under `firmware/` through Phase 6: board bring-up, TinyRTC, RS485/Modbus, XY-MD03, N4D8B08, ADS1115, Sensor Manager, Actuator Manager, Safety Manager, Settings Manager, Circulation Manager, Process Controller, Batch Manager, Manual Control HMI with START / ACK INT / ABORT
 - GPIO and fieldbus map at [hardware/wiring/esp32-gpio-map.md](../hardware/wiring/esp32-gpio-map.md)
 - Placeholder folders for schematics, PCB, mechanical, calibration data, test results, and tests
 
-Next implementation step: **Phase 6 — Process Controller and Batch Manager.**
+Next implementation step: **Phase 7 — Logging and HMI.**
 
 ---
 
@@ -370,7 +370,7 @@ IDLE -> PRECHECK -> DRYING -> COOLING -> DISCHARGING -> COMPLETE
 
 # 8. Build Order
 
-Phases 0–5 firmware is in the tree. Phases 1–4 hardware bench is complete (board, RTC, 2× XY-MD03, N4D8B08, ADS1115 moisture/EC). Phase 6 firmware is next. Keep heater power disconnected until Phase 5 safety tests pass.
+Phases 0–6 firmware is in the tree. Phases 1–4 hardware bench is complete (board, RTC, 2× XY-MD03, N4D8B08, ADS1115 moisture/EC). Phase 7 (logging + full HMI) is next. Keep heater power disconnected until Phase 5 safety tests pass.
 
 ## Phase 0 — Repository Skeleton
 
@@ -812,12 +812,11 @@ The project is ready for normal operation when:
 
 # 13. Immediate Next Step
 
-Start **Phase 6**:
+Start **Phase 7**:
 
-1. Implement Process Controller state machine (IDLE → PRECHECK → DRYING → COOLING → DISCHARGING → COMPLETE / FAULT)
-2. Implement Batch Manager and batch ID generation
-3. Enforce moisture completion and cooling completion
-4. Implement discharge sequence
-5. Store interrupted-batch recovery flag in NVS
+1. Queue-based logger at 1-second interval during active states
+2. Batch summary at completion (SD)
+3. Screens: Dashboard, Batch Setup, Drying, Cooling, Discharge, Complete, Manual, Settings, History, Alarms, System Info
+4. HMI posts commands through the application layer only
 
-Keep Manual Control available for bench tests. Do not connect the high-power heater until Phase 5 safety tests pass.
+Phase 6 Process Controller and Batch Manager are in the tree (START / ACK INT / ABORT on the foundation screen). Keep Manual Control available for bench tests. Do not connect the high-power heater until Phase 5 safety tests pass.

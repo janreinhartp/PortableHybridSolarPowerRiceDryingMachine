@@ -53,6 +53,17 @@ typedef struct {
     bool circulation_active;
     bool circulation_elevator_on;
     uint8_t circulation_mode;
+
+    /* Phase 6 — process / batch summary for HMI */
+    uint8_t dryer_state; /* dryer_state_t */
+    char batch_id[16];
+    bool batch_interrupted;
+    uint32_t drying_elapsed_s;
+    uint32_t cooling_elapsed_s;
+    uint32_t discharge_elapsed_s;
+    float target_moisture_pct;
+    float drying_temperature_c;
+    float cooling_temperature_c;
 } system_status_t;
 
 #ifdef __cplusplus

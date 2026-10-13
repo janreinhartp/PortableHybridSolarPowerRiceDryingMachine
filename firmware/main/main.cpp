@@ -1,10 +1,10 @@
-#include "actuator_manager.h"
 #include "board_hal.h"
 #include "dryer_controller.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "nvs_flash.h"
+#include "process_controller.h"
 #include "ui_manager.h"
 
 static const char *TAG = "main";
@@ -15,36 +15,28 @@ static unsigned s_touch_taps = 0;
 static void runtime_status_task(void *arg)
 {
     (void)arg;
-    bool safe_off_attempted = false;
 
     while (true) {
         dryer_controller_refresh_heap(&s_status);
         dryer_controller_poll_fieldbus(&s_status);
 
-        /* Once the relay answers, force a safe all-OFF (fail-soft if it drops). */
-        if (s_status.relay_ok && !safe_off_attempted) {
-            safe_off_attempted = true;
-            ESP_LOGI(TAG, "Relay online — commanding all coils OFF via Actuator Manager");
-            actuator_manager_all_off();
-            dryer_controller_poll_fieldbus(&s_status);
-        }
-
         ESP_LOGI(TAG,
-                 "hotair=%s/%.1fC chamber=%s/%.1fC moist=%s/%.1f%% ec=%s/%.2f "
-                 "relay=%s@%u elev=%d heat=%d fan=%d door=%d/%d "
-                 "heat_ok=%d fault=%u circ=%d",
+                 "state=%s batch=%s hotair=%s/%.1fC chamber=%s/%.1fC "
+                 "moist=%s/%.1f%% dry=%us cool=%us disc=%us "
+                 "heat=%d fan=%d elev=%d fault=%u int=%d",
+                 process_controller_state_name(
+                     (dryer_state_t)s_status.dryer_state),
+                 s_status.batch_id[0] ? s_status.batch_id : "-",
                  s_status.hotair_ok ? "ok" : "fail", s_status.hotair_temp_c,
                  s_status.chamber_ok ? "ok" : "fail", s_status.chamber_temp_c,
                  s_status.moisture_ok ? "ok" : "fail", s_status.moisture_pct,
-                 s_status.ec_ok ? "ok" : "fail", s_status.ec_value,
-                 s_status.relay_ok ? "ok" : "fail",
-                 (unsigned)actuator_manager_relay_address(),
-                 (int)s_status.relay_elevator, (int)s_status.relay_heater,
-                 (int)s_status.relay_fan,
-                 (int)s_status.relay_door_open, (int)s_status.relay_door_close,
-                 (int)s_status.heating_permitted,
+                 (unsigned)s_status.drying_elapsed_s,
+                 (unsigned)s_status.cooling_elapsed_s,
+                 (unsigned)s_status.discharge_elapsed_s,
+                 (int)s_status.relay_heater, (int)s_status.relay_fan,
+                 (int)s_status.relay_elevator,
                  (unsigned)s_status.active_fault,
-                 (int)s_status.circulation_active);
+                 (int)s_status.batch_interrupted);
 
         if (board_hal_lvgl_lock(100)) {
             ui_manager_update_runtime(&s_status, s_touch_taps);
@@ -56,7 +48,7 @@ static void runtime_status_task(void *arg)
 
 extern "C" void app_main(void)
 {
-    ESP_LOGI(TAG, "Hybrid Solar Power Rice Dryer firmware starting (Phase 5)");
+    ESP_LOGI(TAG, "Hybrid Solar Power Rice Dryer firmware starting (Phase 6)");
 
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -78,5 +70,5 @@ extern "C" void app_main(void)
     }
 
     xTaskCreate(runtime_status_task, "runtime_status", 6144, nullptr, 3, nullptr);
-    ESP_LOGI(TAG, "Phase 5 running (Safety / Settings / Circulation)");
+    ESP_LOGI(TAG, "Phase 6 running (Process Controller / Batch Manager)");
 }

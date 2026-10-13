@@ -1833,9 +1833,9 @@ firmware/
     ├── board/
     ├── app/
     │   ├── dryer_controller/
-    │   ├── process_controller/   # Phase 6 — planned
+    │   ├── process_controller/   # Phase 6 (done)
     │   ├── safety_manager/       # Phase 5 (done)
-    │   └── batch_manager/        # Phase 6 — planned
+    │   └── batch_manager/        # Phase 6 (done)
     ├── services/
     │   ├── th_sensor/
     │   ├── sensor_manager/

@@ -55,6 +55,12 @@ fault_code_t safety_manager_active_fault(void);
 esp_err_t safety_manager_acknowledge(void);
 
 /**
+ * Raise a process-originated fault (e.g. F010 max drying time).
+ * Forces heater OFF. Does not override an active over-temperature latch.
+ */
+esp_err_t safety_manager_raise_fault(fault_code_t code);
+
+/**
  * Request heater ON/OFF. ON is refused when heating is not permitted.
  * Safety still re-evaluates and can force OFF on the next tick.
  */
