@@ -47,6 +47,38 @@ const char *process_controller_state_name(dryer_state_t state);
 /** True when manual actuator buttons may be used (IDLE / COMPLETE). */
 bool process_controller_manual_control_allowed(void);
 
+/** True in IDLE, COMPLETE, and FAULT — not while a batch is in progress. */
+bool process_controller_settings_editable(void);
+
+/**
+ * Copy process, batch, and settings fields into the HMI snapshot.
+ * Does not run the state machine.
+ */
+void process_controller_fill_status(system_status_t *status);
+
+/** Persist settings. Refused while PRECHECK / DRYING / COOLING / DISCHARGING. */
+esp_err_t process_controller_save_settings(const dryer_settings_t *settings);
+
+/** Operator fault acknowledge. Does not clear an active over-temperature trip. */
+esp_err_t process_controller_acknowledge_fault(void);
+
+esp_err_t process_controller_manual_toggle_fan(void);
+esp_err_t process_controller_manual_toggle_elevator(void);
+esp_err_t process_controller_manual_toggle_heater(void);
+esp_err_t process_controller_manual_all_off(void);
+esp_err_t process_controller_manual_toggle_circulation(void);
+esp_err_t process_controller_manual_door_open(void);
+esp_err_t process_controller_manual_door_close(void);
+esp_err_t process_controller_manual_door_stop(void);
+
+/**
+ * Commissioning: scan the bus and assign one XY-MD03.
+ * new_addr is the product id (hot-air 1, chamber 2). Refused during a batch.
+ * msg receives a short result string.
+ */
+esp_err_t process_controller_assign_sensor(uint8_t new_addr, const char *role,
+                                           char *msg, size_t msg_len);
+
 #ifdef __cplusplus
 }
 #endif

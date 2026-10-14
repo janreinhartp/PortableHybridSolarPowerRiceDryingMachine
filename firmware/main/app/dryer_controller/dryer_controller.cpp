@@ -1,11 +1,15 @@
 #include "dryer_controller.h"
 
+#include <cstdio>
+#include <cstring>
+
 #include "actuator_manager.h"
 #include "batch_manager.h"
 #include "board_hal.h"
 #include "circulation_manager.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "logger.h"
 #include "modbus_rtu.h"
 #include "process_controller.h"
 #include "relay_modbus.h"
@@ -48,7 +52,7 @@ esp_err_t dryer_controller_init(system_status_t *status)
     *status = {};
     refresh_heap(status);
 
-    ESP_LOGI(TAG, "Phase 6 bring-up starting");
+    ESP_LOGI(TAG, "Phase 7 bring-up starting");
 
     board_hal_status_t board {};
     esp_err_t err = board_hal_init(&board);
@@ -89,6 +93,9 @@ esp_err_t dryer_controller_init(system_status_t *status)
 
     batch_manager_init();
     process_controller_init();
+    if (logger_init(status->sd_ok) != ESP_OK) {
+        ESP_LOGW(TAG, "Logger init failed");
+    }
 
     esp_err_t bus_err = modbus_rtu_init();
     status->rs485_ok = (bus_err == ESP_OK);
@@ -105,10 +112,14 @@ esp_err_t dryer_controller_init(system_status_t *status)
         process_controller_init();
     }
 
+    process_controller_fill_status(status);
+    status->logger_ok = logger_is_healthy();
+    status->logger_dropped = logger_dropped_count();
     refresh_heap(status);
-    ESP_LOGI(TAG, "Bring-up done rtc=%s rs485=%s heap=%u",
+    ESP_LOGI(TAG, "Bring-up done rtc=%s rs485=%s sd=%s heap=%u",
              status->rtc_ok ? "ok" : "fail",
              status->rs485_ok ? "ok" : "fail",
+             status->sd_ok ? "ok" : "fail",
              (unsigned)status->free_heap);
     return ESP_OK;
 }
@@ -124,7 +135,13 @@ void dryer_controller_refresh_heap(system_status_t *status)
 
 void dryer_controller_poll_fieldbus(system_status_t *status)
 {
-    if (status == nullptr || !status->rs485_ok) {
+    if (status == nullptr) {
+        return;
+    }
+
+    status->logger_ok = logger_is_healthy();
+    status->logger_dropped = logger_dropped_count();
+    if (!status->rs485_ok) {
         return;
     }
 
@@ -154,6 +171,7 @@ void dryer_controller_poll_fieldbus(system_status_t *status)
     settings_manager_get(&settings);
     safety_manager_evaluate(&sensors, &settings, status->relay_ok, status->rtc_ok);
 
+    const dryer_state_t state_before = process_controller_get_state();
     process_controller_tick(&sensors, &settings, status);
 
     if (circulation_manager_is_active()) {
@@ -179,6 +197,46 @@ void dryer_controller_poll_fieldbus(system_status_t *status)
     status->safety_heater_forced_off = safety.heater_forced_off;
     status->safety_fan_forced_on = safety.fan_forced_on;
     status->active_fault = (uint8_t)safety.active_fault;
+
+    static fault_code_t s_prev_fault = FAULT_NONE;
+    static char s_fault_time[24] = {};
+    static char s_fault_state[16] = {};
+    if (safety.active_fault != s_prev_fault && safety.active_fault != FAULT_NONE) {
+        if (status->rtc_ok) {
+            snprintf(s_fault_time, sizeof(s_fault_time), "%04u-%02u-%02u %02u:%02u:%02u",
+                     (unsigned)(status->rtc_year % 10000u),
+                     (unsigned)(status->rtc_month % 100u),
+                     (unsigned)(status->rtc_day % 100u),
+                     (unsigned)(status->rtc_hour % 100u),
+                     (unsigned)(status->rtc_minute % 100u),
+                     (unsigned)(status->rtc_second % 100u));
+        } else {
+            snprintf(s_fault_time, sizeof(s_fault_time), "NO-RTC");
+        }
+        /* Prefer the state that was running when the fault appeared. */
+        const dryer_state_t shown =
+            (state_before != DRYER_STATE_FAULT) ? state_before
+                                                : process_controller_get_state();
+        snprintf(s_fault_state, sizeof(s_fault_state), "%s",
+                 process_controller_state_name(shown));
+
+        logger_alarm_t alarm {};
+        snprintf(alarm.timestamp, sizeof(alarm.timestamp), "%s", s_fault_time);
+        snprintf(alarm.state, sizeof(alarm.state), "%s", s_fault_state);
+        snprintf(alarm.code, sizeof(alarm.code), "%s",
+                 safety_manager_fault_name(safety.active_fault));
+        snprintf(alarm.detail, sizeof(alarm.detail), "%s",
+                 safety_manager_fault_hint(safety.active_fault));
+        logger_submit_alarm(&alarm);
+    }
+    s_prev_fault = safety.active_fault;
+    if (safety.active_fault == FAULT_NONE) {
+        status->fault_time[0] = '\0';
+        status->fault_state[0] = '\0';
+    } else {
+        snprintf(status->fault_time, sizeof(status->fault_time), "%s", s_fault_time);
+        snprintf(status->fault_state, sizeof(status->fault_state), "%s", s_fault_state);
+    }
 
     circulation_status_t circ {};
     circulation_manager_get_status(&circ);

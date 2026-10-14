@@ -1,515 +1,390 @@
 #include "ui_manager.h"
 
 #include <cstdio>
-#include <cstring>
 
-#include "actuator_manager.h"
-#include "batch_manager.h"
-#include "circulation_manager.h"
-#include "esp_log.h"
+#include "alarms_screen.h"
+#include "batch_setup_screen.h"
+#include "commission_screen.h"
+#include "complete_screen.h"
+#include "dashboard_screen.h"
+#include "history_screen.h"
 #include "lvgl.h"
+#include "manual_screen.h"
+#include "more_screen.h"
 #include "process_controller.h"
+#include "run_screen.h"
 #include "safety_manager.h"
-#include "settings_manager.h"
-#include "th_sensor.h"
+#include "screen_common.h"
+#include "settings_screen.h"
+#include "system_info_screen.h"
+#include "trend_buffer.h"
+#include "ui_theme.h"
+#include "ui_widgets.h"
 
-static const char *TAG_UI = "ui";
-
-static lv_obj_t *s_status_box = nullptr;
-static lv_obj_t *s_sensor_label = nullptr;
-static lv_obj_t *s_relay_label = nullptr;
-static lv_obj_t *s_process_label = nullptr;
-static lv_obj_t *s_setup_label = nullptr;
+static lv_obj_t *s_chip = nullptr;
+static lv_obj_t *s_batch = nullptr;
+static lv_obj_t *s_phase = nullptr;
+static lv_obj_t *s_clock = nullptr;
+static lv_obj_t *s_fault = nullptr;
+static lv_obj_t *s_content = nullptr;
+static lv_obj_t *s_nav[4] = {};
+static ui_screen_t s_screen = UI_SCREEN_DASHBOARD;
+static uint8_t s_seen_state = 0xFF;
+static system_status_t s_status {};
+static unsigned s_taps = 0;
 static unsigned *s_tap_counter = nullptr;
+static char s_ephemeral[120] = {};
+static bool s_ephemeral_active = false;
+static uint8_t s_ephemeral_state = 0xFF;
 
-static lv_obj_t *s_btn_fan = nullptr;
-static lv_obj_t *s_btn_elev = nullptr;
-static lv_obj_t *s_btn_heater = nullptr;
-static lv_obj_t *s_btn_all_off = nullptr;
-static lv_obj_t *s_btn_circ = nullptr;
-static lv_obj_t *s_btn_door_open = nullptr;
-static lv_obj_t *s_btn_door_close = nullptr;
-static lv_obj_t *s_btn_door_stop = nullptr;
-
-static void set_setup_msg(const char *msg);
-
-static const char *ok_fail(bool ok)
-{
-    return ok ? "OK" : "FAIL";
-}
-
-static const char *on_off(bool on)
-{
-    return on ? "ON" : "off";
-}
-
-static bool manual_ok(void)
-{
-    return process_controller_manual_control_allowed();
-}
-
-static void set_manual_enabled(bool enabled)
-{
-    lv_obj_t *btns[] = {
-        s_btn_fan,         s_btn_elev,       s_btn_heater,    s_btn_all_off,
-        s_btn_circ,         s_btn_door_open,  s_btn_door_close, s_btn_door_stop,
-    };
-    for (size_t i = 0; i < sizeof(btns) / sizeof(btns[0]); ++i) {
-        if (btns[i] == nullptr) {
-            continue;
-        }
-        if (enabled) {
-            lv_obj_clear_state(btns[i], LV_STATE_DISABLED);
-        } else {
-            lv_obj_add_state(btns[i], LV_STATE_DISABLED);
-        }
-    }
-}
-
-static void on_tap_btn(lv_event_t *e)
-{
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED || s_tap_counter == nullptr) {
-        return;
-    }
-    (*s_tap_counter)++;
-}
-
-static void on_start_batch(lv_event_t *e)
-{
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
-        return;
-    }
-    esp_err_t err = process_controller_start();
-    if (err == ESP_OK) {
-        set_setup_msg("Batch START → PRECHECK");
-    } else if (batch_manager_interrupted_pending()) {
-        set_setup_msg("START refused — ACK interrupted batch first");
-    } else if (process_controller_get_state() != DRYER_STATE_IDLE &&
-               process_controller_get_state() != DRYER_STATE_COMPLETE) {
-        set_setup_msg("START refused — batch already running");
-    } else {
-        set_setup_msg("START refused (fault or invalid state)");
-    }
-}
-
-static void on_ack_interrupted(lv_event_t *e)
-{
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
-        return;
-    }
-    if (process_controller_acknowledge_interrupted() == ESP_OK) {
-        set_setup_msg("Interrupted batch acknowledged — START allowed");
-    } else {
-        set_setup_msg("ACK interrupted failed");
-    }
-}
-
-static void on_abort_batch(lv_event_t *e)
-{
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
-        return;
-    }
-    process_controller_abort();
-    set_setup_msg("Batch ABORT → IDLE");
-}
-
-static void on_fan_toggle(lv_event_t *e)
-{
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
-        return;
-    }
-    if (!manual_ok()) {
-        set_setup_msg("Manual blocked — batch active");
-        return;
-    }
-    relay_state_t st {};
-    actuator_manager_refresh(&st);
-    actuator_manager_set_fan(!st.fan);
-}
-
-static void on_elev_toggle(lv_event_t *e)
-{
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
-        return;
-    }
-    if (!manual_ok()) {
-        set_setup_msg("Manual blocked — batch active");
-        return;
-    }
-    if (circulation_manager_is_active()) {
-        circulation_manager_stop();
-        set_setup_msg("Circulation STOP (manual elevator)");
-    }
-    relay_state_t st {};
-    actuator_manager_refresh(&st);
-    actuator_manager_set_elevator(!st.elevator);
-}
-
-static void on_heater_toggle(lv_event_t *e)
-{
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
-        return;
-    }
-    if (!manual_ok()) {
-        set_setup_msg("Manual blocked — batch active");
-        return;
-    }
-    relay_state_t st {};
-    actuator_manager_refresh(&st);
-    safety_manager_request_heater(!st.heater);
-}
-
-static void on_circ_toggle(lv_event_t *e)
-{
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
-        return;
-    }
-    if (!manual_ok()) {
-        set_setup_msg("Manual blocked — batch active");
-        return;
-    }
-    dryer_settings_t cfg {};
-    settings_manager_get(&cfg);
-    circulation_manager_configure(&cfg);
-    if (circulation_manager_is_active()) {
-        circulation_manager_stop();
-        set_setup_msg("Circulation STOP");
-    } else {
-        if (circulation_manager_start() == ESP_OK) {
-            set_setup_msg(cfg.circulation_mode == CIRCULATION_MODE_CONTINUOUS
-                              ? "Circulation START continuous"
-                              : "Circulation START interval");
-        } else {
-            set_setup_msg("Circulation START failed (check settings)");
-        }
-    }
-}
-
-static void on_fault_ack(lv_event_t *e)
-{
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
-        return;
-    }
-    if (safety_manager_acknowledge() == ESP_OK) {
-        set_setup_msg("Fault acknowledged");
-    } else {
-        set_setup_msg("Fault ACK refused (condition still active)");
-    }
-}
-
-static void on_door_open(lv_event_t *e)
-{
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
-        return;
-    }
-    if (!manual_ok()) {
-        set_setup_msg("Manual blocked — batch active");
-        return;
-    }
-    actuator_manager_open_door();
-}
-
-static void on_door_close(lv_event_t *e)
-{
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
-        return;
-    }
-    if (!manual_ok()) {
-        set_setup_msg("Manual blocked — batch active");
-        return;
-    }
-    actuator_manager_close_door();
-}
-
-static void on_door_stop(lv_event_t *e)
-{
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
-        return;
-    }
-    if (!manual_ok()) {
-        set_setup_msg("Manual blocked — batch active");
-        return;
-    }
-    actuator_manager_stop_door();
-}
-
-static void on_all_off(lv_event_t *e)
-{
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
-        return;
-    }
-    if (!manual_ok()) {
-        set_setup_msg("Manual blocked — use ABORT");
-        return;
-    }
-    if (circulation_manager_is_active()) {
-        circulation_manager_stop();
-    }
-    actuator_manager_all_off();
-}
-
-static void set_setup_msg(const char *msg)
-{
-    if (s_setup_label != nullptr) {
-        lv_label_set_text(s_setup_label, msg);
-    }
-    ESP_LOGI(TAG_UI, "%s", msg);
-}
-
-/**
- * Assign a factory-default XY-MD03 (usually still at ID 1) to a product role.
- * Connect only ONE probe. Relay should already be moved off address 1 (DIP=10).
- */
-static void assign_sensor_role(uint8_t new_addr, const char *role)
-{
-    static const uint8_t k_try[] = {1, 2, 3, 4, 5, 8, 10};
-    uint8_t found = 0;
-    th_reading_t reading {};
-
-    for (size_t i = 0; i < sizeof(k_try); ++i) {
-        if (th_sensor_read(k_try[i], &reading) == ESP_OK) {
-            found = k_try[i];
-            break;
-        }
-    }
-
-    if (found == 0) {
-        set_setup_msg("Sensor setup: no XY-MD03 answering (wire ONE probe only)");
-        return;
-    }
-
-    if (found == new_addr) {
-        char buf[96];
-        snprintf(buf, sizeof(buf), "Sensor setup: already %s @%u (%.1fC)", role, found,
-                 reading.temperature_c);
-        set_setup_msg(buf);
-        return;
-    }
-
-    esp_err_t err = th_sensor_set_address(found, new_addr);
-    char buf[128];
-    if (err == ESP_OK) {
-        snprintf(buf, sizeof(buf),
-                 "Sensor setup: %s wrote %u→%u OK — power-cycle probe", role, found, new_addr);
-    } else {
-        snprintf(buf, sizeof(buf), "Sensor setup: %s %u→%u FAILED (%s)", role, found, new_addr,
-                 esp_err_to_name(err));
-    }
-    set_setup_msg(buf);
-}
-
-static void on_assign_hotair(lv_event_t *e)
-{
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
-        return;
-    }
-    assign_sensor_role(TH_SENSOR_HOTAIR_ADDR, "Hot-air");
-}
-
-static void on_assign_chamber(lv_event_t *e)
-{
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
-        return;
-    }
-    assign_sensor_role(TH_SENSOR_CHAMBER_ADDR, "Chamber");
-}
-
-static lv_obj_t *make_btn(lv_obj_t *parent, const char *text, lv_event_cb_t cb, lv_coord_t w)
-{
-    lv_obj_t *btn = lv_btn_create(parent);
-    lv_obj_set_size(btn, w, 44);
-    lv_obj_add_event_cb(btn, cb, LV_EVENT_CLICKED, nullptr);
-    lv_obj_t *label = lv_label_create(btn);
-    lv_label_set_text(label, text);
-    lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
-    lv_obj_center(label);
-    return btn;
-}
-
-void ui_manager_show_foundation_screen(const system_status_t *status)
-{
-    lv_obj_t *scr = lv_scr_act();
-    lv_obj_clean(scr);
-    lv_obj_set_style_bg_color(scr, lv_color_hex(0x1B2838), 0);
-
-    lv_obj_t *title = lv_label_create(scr);
-    lv_label_set_text(title, "Rice Dryer — Phase 6");
-    lv_obj_set_style_text_color(title, lv_color_hex(0xF2F5F8), 0);
-    lv_obj_set_style_text_font(title, &lv_font_montserrat_24, 0);
-    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 8);
-
-    lv_obj_t *subtitle = lv_label_create(scr);
-    lv_label_set_text(subtitle,
-                      "Process + Batch  |  START / ACK INT / ABORT  |  keep heater power disconnected");
-    lv_obj_set_style_text_color(subtitle, lv_color_hex(0x9BB0C4), 0);
-    lv_obj_set_style_text_font(subtitle, &lv_font_montserrat_14, 0);
-    lv_obj_align(subtitle, LV_ALIGN_TOP_MID, 0, 40);
-
-    s_status_box = lv_label_create(scr);
-    lv_obj_set_style_text_color(s_status_box, lv_color_hex(0xE8EEF4), 0);
-    lv_obj_set_style_text_font(s_status_box, &lv_font_montserrat_14, 0);
-    lv_obj_align(s_status_box, LV_ALIGN_TOP_LEFT, 24, 68);
-
-    s_process_label = lv_label_create(scr);
-    lv_obj_set_style_text_color(s_process_label, lv_color_hex(0x7EC8FF), 0);
-    lv_obj_set_style_text_font(s_process_label, &lv_font_montserrat_16, 0);
-    lv_obj_align(s_process_label, LV_ALIGN_TOP_LEFT, 24, 96);
-
-    s_sensor_label = lv_label_create(scr);
-    lv_obj_set_style_text_color(s_sensor_label, lv_color_hex(0x7DCFB6), 0);
-    lv_obj_set_style_text_font(s_sensor_label, &lv_font_montserrat_14, 0);
-    lv_obj_align(s_sensor_label, LV_ALIGN_TOP_LEFT, 24, 150);
-
-    s_relay_label = lv_label_create(scr);
-    lv_obj_set_style_text_color(s_relay_label, lv_color_hex(0xF0C808), 0);
-    lv_obj_set_style_text_font(s_relay_label, &lv_font_montserrat_14, 0);
-    lv_obj_align(s_relay_label, LV_ALIGN_TOP_LEFT, 24, 230);
-
-    s_setup_label = lv_label_create(scr);
-    lv_obj_set_style_text_color(s_setup_label, lv_color_hex(0xF2A65A), 0);
-    lv_obj_set_style_text_font(s_setup_label, &lv_font_montserrat_14, 0);
-    lv_obj_align(s_setup_label, LV_ALIGN_TOP_LEFT, 24, 320);
-    lv_label_set_text(s_setup_label,
-                      "Load rice, then START. If interrupted flag set, press ACK INT first.");
-
-    /* Row 0 — Process controls */
-    lv_obj_t *p1 = make_btn(scr, "START", on_start_batch, 110);
-    lv_obj_align(p1, LV_ALIGN_BOTTOM_LEFT, 16, -140);
-    lv_obj_t *p2 = make_btn(scr, "ACK INT", on_ack_interrupted, 110);
-    lv_obj_align(p2, LV_ALIGN_BOTTOM_LEFT, 136, -140);
-    lv_obj_t *p3 = make_btn(scr, "ABORT", on_abort_batch, 110);
-    lv_obj_align(p3, LV_ALIGN_BOTTOM_LEFT, 256, -140);
-    lv_obj_t *p4 = make_btn(scr, "ACK Fault", on_fault_ack, 120);
-    lv_obj_align(p4, LV_ALIGN_BOTTOM_LEFT, 376, -140);
-    lv_obj_t *p5 = make_btn(scr, "Touch+", on_tap_btn, 100);
-    lv_obj_align(p5, LV_ALIGN_BOTTOM_LEFT, 508, -140);
-
-    /* Row 1 — Manual Control (disabled while batch active) */
-    s_btn_fan = make_btn(scr, "Fan", on_fan_toggle, 90);
-    lv_obj_align(s_btn_fan, LV_ALIGN_BOTTOM_LEFT, 16, -84);
-    s_btn_elev = make_btn(scr, "Elev", on_elev_toggle, 90);
-    lv_obj_align(s_btn_elev, LV_ALIGN_BOTTOM_LEFT, 116, -84);
-    s_btn_heater = make_btn(scr, "Heater*", on_heater_toggle, 100);
-    lv_obj_align(s_btn_heater, LV_ALIGN_BOTTOM_LEFT, 216, -84);
-    s_btn_all_off = make_btn(scr, "All OFF", on_all_off, 100);
-    lv_obj_align(s_btn_all_off, LV_ALIGN_BOTTOM_LEFT, 328, -84);
-    s_btn_circ = make_btn(scr, "Circ", on_circ_toggle, 90);
-    lv_obj_align(s_btn_circ, LV_ALIGN_BOTTOM_LEFT, 440, -84);
-
-    /* Row 2 door + sensor address commissioning */
-    s_btn_door_open = make_btn(scr, "Door OPEN", on_door_open, 130);
-    lv_obj_align(s_btn_door_open, LV_ALIGN_BOTTOM_LEFT, 16, -24);
-    s_btn_door_close = make_btn(scr, "Door CLOSE", on_door_close, 130);
-    lv_obj_align(s_btn_door_close, LV_ALIGN_BOTTOM_LEFT, 156, -24);
-    s_btn_door_stop = make_btn(scr, "Door STOP", on_door_stop, 120);
-    lv_obj_align(s_btn_door_stop, LV_ALIGN_BOTTOM_LEFT, 296, -24);
-    lv_obj_t *s1 = make_btn(scr, "->Hotair(1)", on_assign_hotair, 140);
-    lv_obj_align(s1, LV_ALIGN_BOTTOM_LEFT, 436, -24);
-    lv_obj_t *s2 = make_btn(scr, "->Chamber(2)", on_assign_chamber, 150);
-    lv_obj_align(s2, LV_ALIGN_BOTTOM_LEFT, 588, -24);
-
-    ui_manager_update_runtime(status, 0);
-}
-
-void ui_manager_update_runtime(const system_status_t *status, unsigned touch_taps)
+static const char *phase_text_for(const system_status_t *status)
 {
     if (status == nullptr) {
+        return "Ready";
+    }
+    switch ((dryer_state_t)status->dryer_state) {
+    case DRYER_STATE_PRECHECK:
+        return "Running Precheck";
+    case DRYER_STATE_DRYING:
+        return "Drying";
+    case DRYER_STATE_COOLING:
+        return "Cooling";
+    case DRYER_STATE_DISCHARGING:
+        return "Discharging";
+    case DRYER_STATE_COMPLETE:
+        return "Batch Complete";
+    case DRYER_STATE_FAULT:
+        if (status->active_fault != 0) {
+            return safety_manager_fault_name((fault_code_t)status->active_fault);
+        }
+        return "Fault Active";
+    case DRYER_STATE_IDLE:
+    default:
+        if (status->batch_interrupted) {
+            return "Interrupted Batch Pending";
+        }
+        return "Ready";
+    }
+}
+
+static void refresh_header_phase(const system_status_t *status)
+{
+    if (s_phase == nullptr || status == nullptr) {
         return;
     }
-
-    set_manual_enabled(process_controller_manual_control_allowed());
-
-    if (s_status_box != nullptr) {
-        char line[192];
-        snprintf(line, sizeof(line),
-                 "Disp %s  Touch %s  SD %s  RTC %s  RS485 %s  Relay %s  ADS %s  taps %u",
-                 ok_fail(status->display_ok),
-                 ok_fail(status->touch_ok),
-                 ok_fail(status->sd_ok),
-                 ok_fail(status->rtc_ok),
-                 ok_fail(status->rs485_ok),
-                 ok_fail(status->relay_ok),
-                 ok_fail(status->ads1115_ok),
-                 touch_taps);
-        lv_label_set_text(s_status_box, line);
-    }
-
-    if (s_process_label != nullptr) {
-        char line[256];
-        snprintf(line, sizeof(line),
-                 "State %s   Batch %s   %s\n"
-                 "Elapsed dry %us  cool %us  disc %us   tgt moist %.1f%%  dry %.0fC  cool %.0fC",
-                 process_controller_state_name((dryer_state_t)status->dryer_state),
-                 status->batch_id[0] ? status->batch_id : "-",
-                 status->batch_interrupted ? "INTERRUPTED — ACK INT" : "",
-                 (unsigned)status->drying_elapsed_s,
-                 (unsigned)status->cooling_elapsed_s,
-                 (unsigned)status->discharge_elapsed_s,
-                 status->target_moisture_pct,
-                 status->drying_temperature_c,
-                 status->cooling_temperature_c);
-        lv_label_set_text(s_process_label, line);
-    }
-
-    if (s_sensor_label != nullptr) {
-        char line[280];
-        if (status->hotair_ok) {
-            snprintf(line, sizeof(line), "Hot-air  #%u : %.1f C   %.1f %%RH\n",
-                     1, status->hotair_temp_c, status->hotair_rh);
-        } else {
-            snprintf(line, sizeof(line), "Hot-air  #%u : OFFLINE\n", 1);
+    if (s_ephemeral_active) {
+        if (status->dryer_state == s_ephemeral_state && s_ephemeral[0] != '\0') {
+            lv_label_set_text(s_phase, s_ephemeral);
+            lv_obj_set_style_text_color(s_phase, ui_theme_color(UI_COLOR_AMBER), 0);
+            return;
         }
-        char chamber[96];
-        if (status->chamber_ok) {
-            snprintf(chamber, sizeof(chamber), "Chamber #%u : %.1f C   %.1f %%RH\n",
-                     2, status->chamber_temp_c, status->chamber_rh);
-        } else {
-            snprintf(chamber, sizeof(chamber), "Chamber #%u : OFFLINE\n", 2);
-        }
-        strncat(line, chamber, sizeof(line) - strlen(line) - 1);
-
-        char analog[128];
-        if (status->moisture_ok || status->ec_ok) {
-            snprintf(analog, sizeof(analog),
-                     "Moisture %s %.1f%% (%.2fV)   EC %s %.2f (%.2fV)",
-                     status->moisture_ok ? "OK" : "FAIL",
-                     status->moisture_pct, status->moisture_voltage,
-                     status->ec_ok ? "OK" : "FAIL",
-                     status->ec_value, status->ec_voltage);
-        } else if (status->ads1115_ok) {
-            snprintf(analog, sizeof(analog), "Moisture/EC : ADS online, reading invalid");
-        } else {
-            snprintf(analog, sizeof(analog), "Moisture/EC : ADS1115 OFFLINE");
-        }
-        strncat(line, analog, sizeof(line) - strlen(line) - 1);
-        lv_label_set_text(s_sensor_label, line);
+        s_ephemeral_active = false;
+        s_ephemeral[0] = '\0';
     }
+    lv_label_set_text(s_phase, phase_text_for(status));
+    lv_obj_set_style_text_color(s_phase, ui_theme_state_color(status->dryer_state), 0);
+}
 
-    if (s_relay_label != nullptr) {
-        char line[220];
-        snprintf(line, sizeof(line),
-                 "Relays  Elev %s  Heat %s  Fan %s  DoorOpen %s  DoorClose %s\n"
-                 "Safety  heat_ok=%s  forceHeatOff=%s  forceFanOn=%s  %s\n"
-                 "Circ    %s  elev=%s  mode=%s",
-                 on_off(status->relay_elevator),
-                 on_off(status->relay_heater),
-                 on_off(status->relay_fan),
-                 on_off(status->relay_door_open),
-                 on_off(status->relay_door_close),
-                 status->heating_permitted ? "YES" : "NO",
-                 status->safety_heater_forced_off ? "YES" : "no",
-                 status->safety_fan_forced_on ? "YES" : "no",
-                 safety_manager_fault_name((fault_code_t)status->active_fault),
-                 status->circulation_active ? "ACTIVE" : "idle",
-                 on_off(status->circulation_elevator_on),
-                 status->circulation_mode == (uint8_t)CIRCULATION_MODE_CONTINUOUS
-                     ? "continuous"
-                     : "interval");
-        lv_label_set_text(s_relay_label, line);
+static ui_screen_t screen_for_state(uint8_t state)
+{
+    switch ((dryer_state_t)state) {
+    case DRYER_STATE_PRECHECK:
+        return UI_SCREEN_BATCH_SETUP;
+    case DRYER_STATE_DRYING:
+    case DRYER_STATE_COOLING:
+    case DRYER_STATE_DISCHARGING:
+        return UI_SCREEN_RUN;
+    case DRYER_STATE_COMPLETE:
+        return UI_SCREEN_COMPLETE;
+    case DRYER_STATE_FAULT:
+        return UI_SCREEN_ALARMS;
+    case DRYER_STATE_IDLE:
+    default:
+        return UI_SCREEN_DASHBOARD;
+    }
+}
+
+static bool screen_follows_process(ui_screen_t screen)
+{
+    switch (screen) {
+    case UI_SCREEN_MANUAL:
+    case UI_SCREEN_SETTINGS:
+    case UI_SCREEN_HISTORY:
+    case UI_SCREEN_SYSTEM:
+    case UI_SCREEN_MORE:
+    case UI_SCREEN_COMMISSION:
+        return false;
+    default:
+        return true;
+    }
+}
+
+static void detach_all(void)
+{
+    dashboard_detach();
+    batch_setup_detach();
+    run_detach();
+    complete_detach();
+    manual_detach();
+    settings_detach();
+    history_detach();
+    alarms_detach();
+    system_info_detach();
+    more_detach();
+    commission_detach();
+}
+
+static void highlight_nav(void)
+{
+    const ui_screen_t mapped[] = {UI_SCREEN_DASHBOARD, UI_SCREEN_RUN, UI_SCREEN_ALARMS,
+                                  UI_SCREEN_MORE};
+    for (size_t i = 0; i < 4; ++i) {
+        if (s_nav[i] == nullptr) {
+            continue;
+        }
+        bool on = false;
+        if (mapped[i] == UI_SCREEN_RUN) {
+            on = (s_screen == UI_SCREEN_RUN || s_screen == UI_SCREEN_BATCH_SETUP ||
+                  s_screen == UI_SCREEN_COMPLETE);
+        } else if (mapped[i] == UI_SCREEN_MORE) {
+            on = (s_screen == UI_SCREEN_MORE || s_screen == UI_SCREEN_MANUAL ||
+                  s_screen == UI_SCREEN_SETTINGS || s_screen == UI_SCREEN_HISTORY ||
+                  s_screen == UI_SCREEN_SYSTEM || s_screen == UI_SCREEN_COMMISSION);
+        } else {
+            on = (s_screen == mapped[i]);
+        }
+        lv_obj_set_style_bg_color(s_nav[i],
+                                  ui_theme_color(on ? UI_COLOR_TEAL : UI_COLOR_SURFACE_ALT), 0);
+    }
+}
+
+static void update_active(void)
+{
+    switch (s_screen) {
+    case UI_SCREEN_DASHBOARD:
+        dashboard_update(&s_status);
+        break;
+    case UI_SCREEN_BATCH_SETUP:
+        batch_setup_update(&s_status);
+        break;
+    case UI_SCREEN_RUN:
+        run_update(&s_status);
+        break;
+    case UI_SCREEN_COMPLETE:
+        complete_update(&s_status);
+        break;
+    case UI_SCREEN_MANUAL:
+        manual_update(&s_status);
+        break;
+    case UI_SCREEN_SETTINGS:
+        settings_update(&s_status);
+        break;
+    case UI_SCREEN_HISTORY:
+        history_update(&s_status);
+        break;
+    case UI_SCREEN_ALARMS:
+        alarms_update(&s_status);
+        break;
+    case UI_SCREEN_SYSTEM:
+        system_info_update(&s_status, s_taps);
+        break;
+    case UI_SCREEN_MORE:
+        more_update(&s_status);
+        break;
+    case UI_SCREEN_COMMISSION:
+        commission_update(&s_status);
+        break;
+    }
+}
+
+void ui_manager_navigate(ui_screen_t screen)
+{
+    if (s_content == nullptr) {
+        return;
+    }
+    detach_all();
+    s_screen = screen;
+    lv_obj_clean(s_content);
+    highlight_nav();
+
+    switch (screen) {
+    case UI_SCREEN_DASHBOARD:
+        dashboard_build(s_content, &s_status);
+        break;
+    case UI_SCREEN_BATCH_SETUP:
+        batch_setup_build(s_content, &s_status);
+        break;
+    case UI_SCREEN_RUN:
+        run_build(s_content, &s_status);
+        break;
+    case UI_SCREEN_COMPLETE:
+        complete_build(s_content, &s_status);
+        break;
+    case UI_SCREEN_MANUAL:
+        manual_build(s_content, &s_status);
+        break;
+    case UI_SCREEN_SETTINGS:
+        settings_build(s_content, &s_status);
+        break;
+    case UI_SCREEN_HISTORY:
+        history_build(s_content, &s_status);
+        break;
+    case UI_SCREEN_ALARMS:
+        alarms_build(s_content, &s_status);
+        break;
+    case UI_SCREEN_SYSTEM:
+        system_info_build(s_content, &s_status, s_taps);
+        break;
+    case UI_SCREEN_MORE:
+        more_build(s_content, &s_status);
+        break;
+    case UI_SCREEN_COMMISSION:
+        commission_build(s_content, &s_status);
+        break;
+    }
+}
+
+static void on_nav(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
+        return;
+    }
+    const int id = (int)(intptr_t)lv_event_get_user_data(e);
+    if (id == (int)UI_SCREEN_RUN) {
+        ui_manager_navigate(screen_for_state(s_status.dryer_state));
+    } else {
+        ui_manager_navigate((ui_screen_t)id);
+    }
+}
+
+void ui_manager_set_banner(const char *msg)
+{
+    if (msg == nullptr || msg[0] == '\0') {
+        s_ephemeral_active = false;
+        s_ephemeral[0] = '\0';
+        refresh_header_phase(&s_status);
+        return;
+    }
+    snprintf(s_ephemeral, sizeof(s_ephemeral), "%s", msg);
+    s_ephemeral_active = true;
+    s_ephemeral_state = s_status.dryer_state;
+    if (s_phase != nullptr) {
+        lv_label_set_text(s_phase, s_ephemeral);
+        lv_obj_set_style_text_color(s_phase, ui_theme_color(UI_COLOR_AMBER), 0);
     }
 }
 
 void ui_manager_bind_tap_counter(unsigned *counter)
 {
     s_tap_counter = counter;
+    system_info_set_tap_counter(counter);
+}
+
+void ui_manager_show_hmi(const system_status_t *status)
+{
+    trend_buffer_init();
+    if (status != nullptr) {
+        s_status = *status;
+        trend_buffer_push(&s_status);
+    }
+    s_seen_state = s_status.dryer_state;
+    s_taps = s_tap_counter != nullptr ? *s_tap_counter : 0;
+
+    lv_obj_t *scr = lv_scr_act();
+    lv_obj_clean(scr);
+    ui_theme_apply_screen(scr);
+
+    s_chip = ui_state_chip_create(scr);
+    lv_obj_set_pos(s_chip, 12, 10);
+    ui_state_chip_set(s_chip, s_status.dryer_state);
+
+    s_batch = ui_theme_make_label(scr, "Batch -", ui_font_body(), UI_COLOR_MUTED);
+    lv_obj_set_pos(s_batch, 170, 16);
+
+    s_phase = ui_theme_make_label(scr, phase_text_for(&s_status), ui_font_body(), UI_COLOR_MUTED);
+    lv_obj_set_width(s_phase, 300);
+    lv_label_set_long_mode(s_phase, LV_LABEL_LONG_DOT);
+    lv_obj_set_pos(s_phase, 380, 16);
+    refresh_header_phase(&s_status);
+
+    s_clock = ui_theme_make_label(scr, "", ui_font_body(), UI_COLOR_MUTED);
+    lv_obj_align(s_clock, LV_ALIGN_TOP_RIGHT, -16, 16);
+
+    s_fault = ui_theme_make_label(scr, "", ui_font_body(), UI_COLOR_RED);
+    lv_obj_set_width(s_fault, 700);
+    lv_obj_set_pos(s_fault, 170, 48);
+
+    s_content = lv_obj_create(scr);
+    lv_obj_set_size(s_content, 1000, 448);
+    lv_obj_set_pos(s_content, 12, 80);
+    lv_obj_set_style_bg_color(s_content, ui_theme_color(UI_COLOR_BG), 0);
+    lv_obj_set_style_border_width(s_content, 0, 0);
+    lv_obj_set_style_pad_all(s_content, 4, 0);
+    /* Avoid scroll-drag eating taps / producing double activations. */
+    lv_obj_clear_flag(s_content, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scrollbar_mode(s_content, LV_SCROLLBAR_MODE_OFF);
+
+    struct {
+        const char *text;
+        ui_screen_t id;
+    } nav[] = {
+        {"Home", UI_SCREEN_DASHBOARD},
+        {"Run", UI_SCREEN_RUN},
+        {"Alarms", UI_SCREEN_ALARMS},
+        {"More", UI_SCREEN_MORE},
+    };
+    for (size_t i = 0; i < 4; ++i) {
+        s_nav[i] = ui_theme_make_btn(scr, nav[i].text, on_nav, (void *)(intptr_t)nav[i].id, 240,
+                                     56, UI_COLOR_SURFACE_ALT);
+        lv_obj_set_pos(s_nav[i], (lv_coord_t)(12 + (int)i * 252), 536);
+    }
+
+    ui_manager_navigate(screen_for_state(s_status.dryer_state));
+}
+
+void ui_manager_update_runtime(const system_status_t *status, unsigned touch_taps)
+{
+    if (status == nullptr || s_content == nullptr) {
+        return;
+    }
+    s_status = *status;
+    s_taps = touch_taps;
+    trend_buffer_push(status);
+
+    if (s_chip != nullptr) {
+        ui_state_chip_set(s_chip, status->dryer_state);
+    }
+    if (s_batch != nullptr) {
+        char buf[48];
+        snprintf(buf, sizeof(buf), "Batch %s", status->batch_id[0] ? status->batch_id : "-");
+        lv_label_set_text(s_batch, buf);
+    }
+    refresh_header_phase(status);
+    if (s_clock != nullptr && status->rtc_ok) {
+        char buf[40];
+        ui_format_header_datetime(buf, sizeof(buf), status->rtc_year, status->rtc_month,
+                                  status->rtc_day, status->rtc_hour, status->rtc_minute);
+        lv_label_set_text(s_clock, buf);
+    }
+    if (s_fault != nullptr) {
+        if (status->active_fault == 0) {
+            lv_label_set_text(s_fault, "");
+        } else {
+            lv_label_set_text(s_fault,
+                              safety_manager_fault_name((fault_code_t)status->active_fault));
+        }
+    }
+
+    if (status->dryer_state != s_seen_state) {
+        s_seen_state = status->dryer_state;
+        s_ephemeral_active = false;
+        s_ephemeral[0] = '\0';
+        refresh_header_phase(status);
+        const ui_screen_t want = screen_for_state(status->dryer_state);
+        if (screen_follows_process(s_screen) && want != s_screen) {
+            ui_manager_navigate(want);
+            return;
+        }
+    }
+    update_active();
 }

@@ -39,6 +39,7 @@ typedef struct {
     float final_ec;
     float final_chamber_temp_c;
     float max_chamber_temp_c;
+    float avg_chamber_temp_c;
 
     /* Recovery snapshot (valid when interrupted_pending). */
     char interrupted_batch_id[16];

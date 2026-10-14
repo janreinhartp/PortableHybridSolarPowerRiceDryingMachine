@@ -905,12 +905,13 @@ Phase 3 fieldbus bench    COMPLETE (2× XY-MD03 + N4D8B08)
 Phase 4 moisture/EC bench COMPLETE (ADS1115 path)
 Firmware Phase 5          IN TREE
 Firmware Phase 6          IN TREE
+Firmware Phase 7          IN TREE
 Hardware Integration      NOT STARTED
 Dry Run                   NOT STARTED
 Rice Validation           NOT STARTED
 ```
 
-Firmware through Phase 6 (Process Controller, Batch Manager) is in `firmware/`. Phases 1–4 hardware bench is confirmed. The next implementation step is Phase 7 (Logging and HMI) in [`docs/MASTERPLAN.md`](docs/MASTERPLAN.md).
+Firmware through Phase 7 (Process Controller, Batch Manager, SD logger, product HMI) is in `firmware/`. The operator SCADA HMI redesign is implemented per [`docs/08-hmi-design-guideline.md`](docs/08-hmi-design-guideline.md) (baseline UX debt history in [`docs/07-hmi-ux-notes.md`](docs/07-hmi-ux-notes.md)). Phases 1–4 hardware bench is confirmed. The next implementation step is Phase 8 (read-only local web dashboard) in [`docs/MASTERPLAN.md`](docs/MASTERPLAN.md).
 
 ---
 
@@ -1191,12 +1192,12 @@ PortableHybridSolarPowerRiceDryingMachine/
 
 # 35. Getting Started
 
-Firmware through Phase 6 is already in `firmware/`. Continue with:
+Firmware through Phase 7 is already in `firmware/`. Continue with:
 
 ```text
-1. Phase 7 — Queue-based SD logger
-2. Full LVGL process screens (Dashboard, Drying, Cooling, …)
-3. Batch history and alarm screens
+1. Phase 8 — Wi-Fi AP RiceDryer-XXXX
+2. Read-only dashboard at 192.168.4.1
+3. Locked GET API and CSV export from the SD card
 ```
 
 Do not connect the high-power heater until Phase 5 safety tests pass.
@@ -1209,12 +1210,12 @@ Follow the execution order in:
 
 [`docs/MASTERPLAN.md`](docs/MASTERPLAN.md)
 
-Phases 0–6 firmware is in the tree (board bring-up, RTC, RS485/Modbus, ADS1115, Sensor/Actuator/Safety/Settings/Circulation managers, Process Controller, Batch Manager, Manual Control with START / ACK INT / ABORT). Phases 1–4 hardware bench is complete.
+Phases 0–7 firmware is in the tree (board bring-up, RTC, RS485/Modbus, ADS1115, Sensor/Actuator/Safety/Settings/Circulation managers, Process Controller, Batch Manager, SD logger, and the product SCADA HMI). HMI redesign status: [`docs/08-hmi-design-guideline.md`](docs/08-hmi-design-guideline.md). Phases 1–4 hardware bench is complete.
 
-The next milestone is Phase 7:
+The next milestone is Phase 8:
 
 ```text
-Logger
+Local Wi-Fi AP
    +
-Product HMI screens
+Read-only web dashboard
 ```

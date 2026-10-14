@@ -6,14 +6,29 @@
 extern "C" {
 #endif
 
-/** Create the Phase 4 Manual Control / sensor screen (call under lvgl_port_lock). */
-void ui_manager_show_foundation_screen(const system_status_t *status);
+typedef enum {
+    UI_SCREEN_DASHBOARD = 0,
+    UI_SCREEN_BATCH_SETUP,
+    UI_SCREEN_RUN,
+    UI_SCREEN_COMPLETE,
+    UI_SCREEN_MANUAL,
+    UI_SCREEN_SETTINGS,
+    UI_SCREEN_HISTORY,
+    UI_SCREEN_ALARMS,
+    UI_SCREEN_SYSTEM,
+    UI_SCREEN_MORE,
+    UI_SCREEN_COMMISSION,
+    /* Legacy aliases kept for any external callers */
+    UI_SCREEN_DRYING = UI_SCREEN_RUN,
+    UI_SCREEN_COOLING = UI_SCREEN_RUN,
+    UI_SCREEN_DISCHARGE = UI_SCREEN_RUN,
+} ui_screen_t;
 
-/** Update live sensor / relay / RTC feedback (call under lvgl_port_lock). */
+void ui_manager_show_hmi(const system_status_t *status);
 void ui_manager_update_runtime(const system_status_t *status, unsigned touch_taps);
-
-/** Bind a shared tap counter updated by the on-screen touch test button. */
 void ui_manager_bind_tap_counter(unsigned *counter);
+void ui_manager_navigate(ui_screen_t screen);
+void ui_manager_set_banner(const char *msg);
 
 #ifdef __cplusplus
 }
