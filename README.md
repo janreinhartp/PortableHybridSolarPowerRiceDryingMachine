@@ -911,7 +911,7 @@ Dry Run                   NOT STARTED
 Rice Validation           NOT STARTED
 ```
 
-Firmware through Phase 7 (Process Controller, Batch Manager, SD logger, product HMI) is in `firmware/`. The Phase 7 HMI is a functional baseline and is **not** considered operator-friendly yet; UX redesign is deferred until a design guideline exists — see [`docs/07-hmi-ux-notes.md`](docs/07-hmi-ux-notes.md). Phases 1–4 hardware bench is confirmed. The next implementation step is Phase 8 (read-only local web dashboard) in [`docs/MASTERPLAN.md`](docs/MASTERPLAN.md).
+Firmware through Phase 7 (Process Controller, Batch Manager, SD logger, product HMI) is in `firmware/`. The operator SCADA HMI redesign is implemented per [`docs/08-hmi-design-guideline.md`](docs/08-hmi-design-guideline.md) (baseline UX debt history in [`docs/07-hmi-ux-notes.md`](docs/07-hmi-ux-notes.md)). Phases 1–4 hardware bench is confirmed. The next implementation step is Phase 8 (read-only local web dashboard) in [`docs/MASTERPLAN.md`](docs/MASTERPLAN.md).
 
 ---
 
@@ -1210,7 +1210,7 @@ Follow the execution order in:
 
 [`docs/MASTERPLAN.md`](docs/MASTERPLAN.md)
 
-Phases 0–7 firmware is in the tree (board bring-up, RTC, RS485/Modbus, ADS1115, Sensor/Actuator/Safety/Settings/Circulation managers, Process Controller, Batch Manager, SD logger, and the product HMI baseline). HMI UX redesign is deferred — see [`docs/07-hmi-ux-notes.md`](docs/07-hmi-ux-notes.md). Phases 1–4 hardware bench is complete.
+Phases 0–7 firmware is in the tree (board bring-up, RTC, RS485/Modbus, ADS1115, Sensor/Actuator/Safety/Settings/Circulation managers, Process Controller, Batch Manager, SD logger, and the product SCADA HMI). HMI redesign status: [`docs/08-hmi-design-guideline.md`](docs/08-hmi-design-guideline.md). Phases 1–4 hardware bench is complete.
 
 The next milestone is Phase 8:
 

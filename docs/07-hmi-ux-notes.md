@@ -1,24 +1,19 @@
 # HMI UX Notes — Phase 7 Baseline
 
-**Status:** Deferred. Do not redesign the product HMI until a design guideline exists.
+**Status:** Historical Phase 7 UX debt record. The SCADA redesign described in [08-hmi-design-guideline.md](08-hmi-design-guideline.md) is **implemented** in `firmware/main/ui/`. Keep this file for context only.
 
-**Related code:** `firmware/main/ui/` (ui_manager + screens)  
+**Related code:** `firmware/main/ui/` (theme, widgets, trend_buffer, ui_manager, screens)  
 **Related plan:** [MASTERPLAN.md](MASTERPLAN.md) Phase 7
 
 ---
 
 ## 1. Decision (2026-10-13)
 
-The Phase 7 touchscreen HMI is **functionally working**: process screens, logging, settings, history, alarms, and manual/commissioning controls are wired through the application layer.
+The Phase 7 touchscreen HMI was **functionally working** as a label-heavy baseline: process screens, logging, settings, history, alarms, and manual/commissioning controls wired through the application layer.
 
-Operator feedback: the UI is **not user-friendly**. A major visual and interaction redesign is required before the HMI is treated as operator-ready.
+Operator feedback at the time: the UI was **not user-friendly**. A major visual and interaction redesign was required.
 
-**For now:**
-
-- Keep the current HMI as a **bench / commissioning baseline**
-- Document UX debt here
-- Write a proper **HMI design guideline** when development resumes
-- Do **not** spend implementation time on a cosmetic redesign until that guideline is agreed
+**Update (2026-10-14):** guideline agreed and landed — see [08-hmi-design-guideline.md](08-hmi-design-guideline.md). Items below describe the **pre-redesign** baseline.
 
 ---
 

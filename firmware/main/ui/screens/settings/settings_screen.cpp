@@ -96,39 +96,27 @@ static void clamp_draft(void)
     if (s_draft.max_drying_time_s <= s_draft.min_drying_time_s) {
         s_draft.max_drying_time_s = s_draft.min_drying_time_s + 60;
     }
-    if (s_draft.circulation_mode != CIRCULATION_MODE_CONTINUOUS &&
-        s_draft.circulation_mode != CIRCULATION_MODE_INTERVAL) {
-        s_draft.circulation_mode = CIRCULATION_MODE_INTERVAL;
-    }
 }
 
 static void render_values(void)
 {
-    char buf[48];
-    const char *texts[F_COUNT];
     char storage[F_COUNT][48];
-
-    snprintf(storage[F_MOIST], sizeof(storage[F_MOIST]), "%.1f %%", s_draft.target_moisture_pct);
-    snprintf(storage[F_DRY], sizeof(storage[F_DRY]), "%.0f C", s_draft.drying_temperature_c);
-    snprintf(storage[F_HYST], sizeof(storage[F_HYST]), "%.1f C", s_draft.temperature_hysteresis_c);
-    snprintf(storage[F_COOL], sizeof(storage[F_COOL]), "%.0f C", s_draft.cooling_temperature_c);
-    snprintf(storage[F_MODE], sizeof(storage[F_MODE]), "%s",
+    snprintf(storage[F_MOIST], sizeof(storage[0]), "%.1f %%", s_draft.target_moisture_pct);
+    snprintf(storage[F_DRY], sizeof(storage[0]), "%.0f C", s_draft.drying_temperature_c);
+    snprintf(storage[F_HYST], sizeof(storage[0]), "%.1f C", s_draft.temperature_hysteresis_c);
+    snprintf(storage[F_COOL], sizeof(storage[0]), "%.0f C", s_draft.cooling_temperature_c);
+    snprintf(storage[F_MODE], sizeof(storage[0]), "%s",
              ui_circ_mode_name((uint8_t)s_draft.circulation_mode));
-    snprintf(storage[F_INTERVAL], sizeof(storage[F_INTERVAL]), "%u s",
+    snprintf(storage[F_INTERVAL], sizeof(storage[0]), "%u s",
              (unsigned)s_draft.circulation_interval_s);
-    snprintf(storage[F_RUN], sizeof(storage[F_RUN]), "%u s",
-             (unsigned)s_draft.circulation_run_time_s);
-    snprintf(storage[F_DISCHARGE], sizeof(storage[F_DISCHARGE]), "%u s",
-             (unsigned)s_draft.discharge_time_s);
-    snprintf(storage[F_MIN], sizeof(storage[F_MIN]), "%u s", (unsigned)s_draft.min_drying_time_s);
-    snprintf(storage[F_MAX], sizeof(storage[F_MAX]), "%u s", (unsigned)s_draft.max_drying_time_s);
-    snprintf(storage[F_HOT], sizeof(storage[F_HOT]), "%.0f C", s_draft.max_hot_air_temperature_c);
-    (void)buf;
-
+    snprintf(storage[F_RUN], sizeof(storage[0]), "%u s", (unsigned)s_draft.circulation_run_time_s);
+    snprintf(storage[F_DISCHARGE], sizeof(storage[0]), "%u s", (unsigned)s_draft.discharge_time_s);
+    snprintf(storage[F_MIN], sizeof(storage[0]), "%u s", (unsigned)s_draft.min_drying_time_s);
+    snprintf(storage[F_MAX], sizeof(storage[0]), "%u s", (unsigned)s_draft.max_drying_time_s);
+    snprintf(storage[F_HOT], sizeof(storage[0]), "%.0f C", s_draft.max_hot_air_temperature_c);
     for (int i = 0; i < F_COUNT; ++i) {
-        texts[i] = storage[i];
         if (s_values[i] != nullptr) {
-            lv_label_set_text(s_values[i], texts[i]);
+            lv_label_set_text(s_values[i], storage[i]);
         }
     }
 }
@@ -193,11 +181,11 @@ static void on_save(lv_event_t *e)
     clamp_draft();
     const esp_err_t err = process_controller_save_settings(&s_draft);
     if (err == ESP_OK) {
-        ui_manager_set_banner("Settings saved");
+        ui_manager_set_banner("Settings Saved");
     } else if (err == ESP_ERR_INVALID_STATE) {
-        ui_manager_set_banner("Save blocked while a batch is running");
+        ui_manager_set_banner("Save Blocked While A Batch Is Running");
     } else {
-        ui_manager_set_banner("Settings rejected - check the ranges");
+        ui_manager_set_banner("Settings Rejected - Check The Ranges");
     }
 }
 
@@ -209,7 +197,7 @@ static void on_defaults(lv_event_t *e)
     settings_manager_get_defaults(&s_draft);
     clamp_draft();
     render_values();
-    ui_manager_set_banner("Defaults loaded - press Save to keep them");
+    ui_manager_set_banner("Defaults Loaded - Press Save To Keep Them");
 }
 
 void settings_detach(void)
@@ -228,33 +216,46 @@ void settings_build(lv_obj_t *parent, const system_status_t *status)
     clamp_draft();
 
     static const char *names[F_COUNT] = {
-        "Target moisture", "Drying temp", "Hysteresis", "Cooling temp",
-        "Circulation",     "Circ interval", "Circ run", "Discharge",
-        "Min drying",      "Max drying",    "Max hot-air",
+        "Target Moisture", "Drying Temp",     "Hysteresis",  "Cooling Temp",
+        "Circulation",     "Circ Interval",   "Circ Run",    "Discharge",
+        "Min Drying",      "Max Drying",      "Max Hot Air",
     };
 
+    lv_obj_t *scroll = lv_obj_create(parent);
+    lv_obj_set_size(scroll, 1000, 320);
+    lv_obj_set_pos(scroll, 0, 0);
+    lv_obj_set_style_bg_opa(scroll, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(scroll, 0, 0);
+    lv_obj_set_style_pad_all(scroll, 0, 0);
+
     for (int i = 0; i < F_COUNT; ++i) {
-        const lv_coord_t y = (lv_coord_t)(i * 36);
-        ui_label(parent, names[i], 8, y + 8, &lv_font_montserrat_14, 0xE8EEF4);
-        s_values[i] = ui_label(parent, "", 220, y + 8, &lv_font_montserrat_14, 0x7EC8FF);
+        const lv_coord_t y = (lv_coord_t)(i * 48);
+        lv_obj_t *card = ui_theme_make_card(scroll, 980, 44);
+        lv_obj_set_pos(card, 8, y);
+        lv_obj_t *name = ui_theme_make_label(card, names[i], ui_font_body(), UI_COLOR_TEXT);
+        lv_obj_align(name, LV_ALIGN_LEFT_MID, 0, 0);
+        s_values[i] = ui_theme_make_label(card, "", ui_font_body(), UI_COLOR_ACCENT);
+        lv_obj_align(s_values[i], LV_ALIGN_LEFT_MID, 220, 0);
         s_args[i][0].field = i;
         s_args[i][0].sign = -1;
         s_args[i][1].field = i;
         s_args[i][1].sign = 1;
         const char *minus = (i == F_MODE) ? "Interval" : "-";
         const char *plus = (i == F_MODE) ? "Continuous" : "+";
-        const lv_coord_t bw = (i == F_MODE) ? 120 : 48;
-        lv_obj_t *down = ui_make_btn(parent, minus, on_adjust, &s_args[i][0], bw, 32);
-        lv_obj_set_pos(down, 420, y);
-        lv_obj_t *up = ui_make_btn(parent, plus, on_adjust, &s_args[i][1], bw, 32);
-        lv_obj_set_pos(up, 420 + bw + 8, y);
+        const lv_coord_t bw = (i == F_MODE) ? 130 : 56;
+        lv_obj_t *down =
+            ui_theme_make_btn(card, minus, on_adjust, &s_args[i][0], bw, 48, UI_COLOR_SURFACE_ALT);
+        lv_obj_align(down, LV_ALIGN_RIGHT_MID, (lv_coord_t)(-(bw + 16)), 0);
+        lv_obj_t *up =
+            ui_theme_make_btn(card, plus, on_adjust, &s_args[i][1], bw, 48, UI_COLOR_SURFACE_ALT);
+        lv_obj_align(up, LV_ALIGN_RIGHT_MID, 0, 0);
     }
 
-    const lv_coord_t y = F_COUNT * 36 + 8;
-    s_save = ui_make_btn(parent, "SAVE", on_save, nullptr, 140, 44);
-    lv_obj_set_pos(s_save, 8, y);
-    lv_obj_t *defaults = ui_make_btn(parent, "DEFAULTS", on_defaults, nullptr, 150, 44);
-    lv_obj_set_pos(defaults, 160, y);
+    s_save = ui_theme_make_btn(parent, "Save", on_save, nullptr, 180, 64, UI_COLOR_TEAL);
+    lv_obj_set_pos(s_save, 8, 340);
+    lv_obj_t *defaults =
+        ui_theme_make_btn(parent, "Restore Defaults", on_defaults, nullptr, 220, 64, UI_COLOR_ACCENT);
+    lv_obj_set_pos(defaults, 204, 340);
 
     s_alive = true;
     render_values();

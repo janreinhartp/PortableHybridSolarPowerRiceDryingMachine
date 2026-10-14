@@ -12,7 +12,8 @@ The numbered design documents remain the requirements source. This file tells th
 | [04-hardware-design.md](04-hardware-design.md) | Electrical and mechanical hardware |
 | [05-software-design.md](05-software-design.md) | Firmware architecture |
 | [06-implementation-plan.md](06-implementation-plan.md) | Detailed phase checklist |
-| [07-hmi-ux-notes.md](07-hmi-ux-notes.md) | Phase 7 HMI UX debt; redesign deferred until a design guideline |
+| [07-hmi-ux-notes.md](07-hmi-ux-notes.md) | Phase 7 HMI UX debt record |
+| [08-hmi-design-guideline.md](08-hmi-design-guideline.md) | Active SCADA HMI design guideline |
 | **MASTERPLAN.md** | **Execution order, demo reuse, locked decisions** |
 
 ---
@@ -621,31 +622,31 @@ Acceptance:
 
 ## Phase 7 — Logging and HMI
 
-Firmware for the tasks below is in the tree. Bench acceptance is still open.
-
-The Phase 7 HMI is a **functional baseline**, not an operator-ready design. It works on the panel but is not user-friendly. A major UX redesign is deferred until a design guideline is written — see [07-hmi-ux-notes.md](07-hmi-ux-notes.md). Do not spend implementation time on a cosmetic HMI overhaul before that guideline exists.
+Firmware for logging and the product HMI is in the tree. The operator SCADA redesign is **implemented** per [08-hmi-design-guideline.md](08-hmi-design-guideline.md). Phase 7 baseline UX debt remains recorded in [07-hmi-ux-notes.md](07-hmi-ux-notes.md). Full dry-run / soak acceptance on hardware is still open.
 
 Tasks:
 
 1. Queue-based logger at 1-second interval during active states
 2. Batch summary at completion
-3. Screens: Dashboard, Batch Setup, Drying, Cooling, Discharge, Complete, Manual, Settings, History, Alarms, System Info
+3. Screens: Home (Dashboard), Batch Setup, Run (Drying/Cooling/Discharging), Complete, Alarms, More → Manual, Settings, History, System Info, Commission
 4. HMI posts commands through the application layer only
+5. Light SCADA theme, gauges with Target lines, 1 Hz trend buffer, bottom nav (Home / Run / Alarms / More)
 
 Acceptance:
 
 ```text
-[ ] CSV rows write without blocking control
-[ ] History lists completed batches
-[ ] Alarms show code, time, and state
-[ ] Touchscreen remains responsive during logging
+[x] CSV rows write without blocking control (queued logger in tree)
+[x] History lists completed batches
+[x] Alarms show code, time, and state
+[x] Operator SCADA screens per docs/08-hmi-design-guideline.md
+[ ] Touchscreen soak / full dry-run acceptance on hardware
 ```
 
-UX redesign (separate from the checklist above):
+UX redesign:
 
 ```text
-[ ] HMI design guideline agreed (docs/08-hmi-design-guideline.md or successor)
-[ ] Operator-facing screens redesigned per that guideline
+[x] HMI design guideline agreed (docs/08-hmi-design-guideline.md)
+[x] Operator-facing screens redesigned per that guideline
 ```
 
 ## Phase 8 — Local Web Dashboard
