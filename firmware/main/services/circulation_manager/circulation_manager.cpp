@@ -14,8 +14,8 @@ esp_err_t circulation_manager_init(void)
 {
     s_status = {};
     s_status.mode = CIRCULATION_MODE_INTERVAL;
-    s_status.interval_s = 10;
-    s_status.run_time_s = 3;
+    s_status.interval_s = 120;
+    s_status.run_time_s = 10;
     s_phase_start_us = 0;
     s_in_run_phase = false;
     ESP_LOGI(TAG, "Circulation Manager ready");

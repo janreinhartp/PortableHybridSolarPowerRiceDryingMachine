@@ -19,6 +19,7 @@ typedef enum {
     FAULT_F004_HOT_AIR_SENSOR = 4,
     FAULT_F005_CHAMBER_SENSOR = 5,
     FAULT_F006_MODBUS_COMMUNICATION = 6,
+    /* Raised when elevator/door command ON exceeds open-loop max duration. */
     FAULT_F007_ELEVATOR_TIMEOUT = 7,
     FAULT_F008_DOOR_TIMEOUT = 8,
     FAULT_F009_SD_CARD_ERROR = 9,

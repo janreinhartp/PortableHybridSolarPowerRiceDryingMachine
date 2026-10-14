@@ -46,6 +46,12 @@ typedef enum {
 static discharge_step_t s_discharge_step = DISCHARGE_OPEN_DOOR;
 static int64_t s_discharge_step_us = 0;
 static const uint32_t k_door_settle_s = 5;
+/* Open-loop max door travel (no ESP32 limit-switch feedback). */
+static const uint32_t k_door_max_travel_s = 30;
+/* Elevator ON grace beyond configured run/discharge time (stuck-on detection). */
+static const uint32_t k_elevator_grace_s = 15;
+static int64_t s_door_cmd_us = 0;
+static int64_t s_elevator_cmd_us = 0;
 static uint8_t s_discharge_phase_pub = 0;
 static uint32_t s_discharge_remaining_pub = 0;
 
@@ -267,9 +273,71 @@ static void enter_fault(fault_code_t code, const sensor_data_t *sensors,
     }
     safety_manager_request_heater(false);
     s_heater_on = false;
+    actuator_manager_stop_door();
+    actuator_manager_set_elevator(false);
+    s_door_cmd_us = 0;
+    s_elevator_cmd_us = 0;
     queue_sample(s_state, sensors, status);
     enqueue_summary("FAULT", sensors, status);
     transition_to(DRYER_STATE_FAULT);
+}
+
+/**
+ * F007 / F008 without position feedback: command-duration watchdogs.
+ * Continuous drying circulation may keep the elevator ON indefinitely (locked).
+ * Door OPEN/CLOSE longer than k_door_max_travel_s raises F008.
+ * Elevator ON longer than max(run, discharge) + grace raises F007.
+ */
+static bool check_actuator_timeouts(const sensor_data_t *sensors,
+                                    const dryer_settings_t *settings,
+                                    system_status_t *status)
+{
+    if (s_state == DRYER_STATE_IDLE || s_state == DRYER_STATE_COMPLETE ||
+        s_state == DRYER_STATE_FAULT) {
+        s_door_cmd_us = 0;
+        s_elevator_cmd_us = 0;
+        return false;
+    }
+
+    relay_state_t coils {};
+    actuator_manager_get_state(&coils);
+    const int64_t now = esp_timer_get_time();
+
+    const bool door_moving = coils.door_open || coils.door_close;
+    if (door_moving) {
+        if (s_door_cmd_us == 0) {
+            s_door_cmd_us = now;
+        } else if (elapsed_s(s_door_cmd_us) >= k_door_max_travel_s) {
+            enter_fault(FAULT_F008_DOOR_TIMEOUT, sensors, status);
+            return true;
+        }
+    } else {
+        s_door_cmd_us = 0;
+    }
+
+    const bool continuous_ok =
+        settings->circulation_mode == CIRCULATION_MODE_CONTINUOUS &&
+        circulation_manager_is_active() &&
+        (s_state == DRYER_STATE_DRYING || s_state == DRYER_STATE_COOLING);
+
+    if (coils.elevator && !continuous_ok) {
+        uint32_t max_s = settings->circulation_run_time_s;
+        if (settings->discharge_time_s > max_s) {
+            max_s = settings->discharge_time_s;
+        }
+        max_s += k_elevator_grace_s;
+
+        if (s_elevator_cmd_us == 0) {
+            s_elevator_cmd_us = now;
+        } else if (elapsed_s(s_elevator_cmd_us) >= max_s) {
+            enter_fault(FAULT_F007_ELEVATOR_TIMEOUT, sensors, status);
+            return true;
+        }
+    } else {
+        s_elevator_cmd_us = 0;
+    }
+
+    return false;
 }
 
 static void apply_heater_hysteresis(const sensor_data_t *sensors,
@@ -671,6 +739,11 @@ void process_controller_tick(const sensor_data_t *sensors,
             publish(sensors, settings, status);
             return;
         }
+    }
+
+    if (check_actuator_timeouts(sensors, settings, status)) {
+        publish(sensors, settings, status);
+        return;
     }
 
     switch (s_state) {

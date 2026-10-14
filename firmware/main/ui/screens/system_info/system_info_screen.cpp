@@ -63,12 +63,13 @@ void system_info_update(const system_status_t *status, unsigned touch_taps)
     if (!s_alive || status == nullptr || s_body == nullptr) {
         return;
     }
-    char line[512];
+    char line[640];
     snprintf(line, sizeof(line),
              "Display %s   Touch %s   LVGL %s\n"
              "SD %s   %u MB Free / %u MB    Logger %s   Dropped %u\n"
              "RTC %s   %04u-%02u-%02u %02u:%02u:%02u\n"
              "RS485 %s   Relay %s   ADS1115 %s\n"
+             "Wi-Fi %s   %s   http://192.168.4.1\n"
              "Heap %u    Internal %u\n"
              "Hot Air %s   Chamber %s   Moisture %s   Conductivity %s\n"
              "Touch Taps %u",
@@ -81,9 +82,12 @@ void system_info_update(const system_status_t *status, unsigned touch_taps)
              (unsigned)(status->rtc_day % 100u), (unsigned)(status->rtc_hour % 100u),
              (unsigned)(status->rtc_minute % 100u), (unsigned)(status->rtc_second % 100u),
              status->rs485_ok ? "Ok" : "Fail", status->relay_ok ? "Ok" : "Fail",
-             status->ads1115_ok ? "Ok" : "Fail", (unsigned)status->free_heap,
-             (unsigned)status->free_internal_heap, status->hotair_ok ? "Ok" : "Fail",
-             status->chamber_ok ? "Ok" : "Fail", status->moisture_ok ? "Ok" : "Fail",
-             status->ec_ok ? "Ok" : "Fail", touch_taps);
+             status->ads1115_ok ? "Ok" : "Fail",
+             status->wifi_ok ? "Ok" : "Fail",
+             status->wifi_ssid[0] ? status->wifi_ssid : "—",
+             (unsigned)status->free_heap, (unsigned)status->free_internal_heap,
+             status->hotair_ok ? "Ok" : "Fail", status->chamber_ok ? "Ok" : "Fail",
+             status->moisture_ok ? "Ok" : "Fail", status->ec_ok ? "Ok" : "Fail",
+             touch_taps);
     lv_label_set_text(s_body, line);
 }

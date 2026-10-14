@@ -87,6 +87,10 @@ typedef struct {
     char batch_ended[24];
     char fault_time[24];
     char fault_state[16];
+
+    /* Phase 8 — local Wi-Fi SoftAP dashboard */
+    bool wifi_ok;
+    char wifi_ssid[32];
 } system_status_t;
 
 #ifdef __cplusplus

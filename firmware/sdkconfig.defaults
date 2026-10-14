@@ -42,3 +42,6 @@ CONFIG_LV_USE_BAR=y
 
 # UART1 used for RS485 / Modbus
 CONFIG_UART_ISR_IN_IRAM=y
+
+# Phase 8 — SoftAP local web dashboard
+CONFIG_ESP_WIFI_SOFTAP_SUPPORT=y

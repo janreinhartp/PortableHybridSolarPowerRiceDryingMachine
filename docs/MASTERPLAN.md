@@ -35,20 +35,22 @@ Phase 4 moisture/EC bench COMPLETE (ADS1115 path)
 Firmware Phase 5          IN TREE
 Firmware Phase 6          IN TREE
 Firmware Phase 7          IN TREE
+Firmware Phase 8          IN TREE
 Hardware Integration      NOT STARTED
-Dry Run                   NOT STARTED
-Rice Validation           NOT STARTED
+Dry Run                   NOT STARTED (checklist ready)
+Rice Validation           NOT STARTED (checklist ready)
 ```
 
 What exists today:
 
 - Design docs under `docs/01` through `docs/06`, summarized in [README.md](../README.md)
 - Waveshare board demo at [ESP32-S3-Touch-LCD-7B-Demo/15_LVGL_SLIDER](ESP32-S3-Touch-LCD-7B-Demo/15_LVGL_SLIDER), kept as a board reference
-- Product firmware under `firmware/` through Phase 7: board bring-up, TinyRTC, RS485/Modbus, XY-MD03, N4D8B08, ADS1115, Sensor Manager, Actuator Manager, Safety Manager, Settings Manager, Circulation Manager, Process Controller, Batch Manager, queue-based SD logger, and the product HMI (Dashboard through System Info). Manual control remains available for bench tests.
+- Product firmware under `firmware/` through Phase 8: board bring-up, TinyRTC, RS485/Modbus, XY-MD03, N4D8B08, ADS1115, Sensor Manager, Actuator Manager, Safety Manager, Settings Manager, Circulation Manager, Process Controller, Batch Manager, queue-based SD logger, product HMI, and local SoftAP read-only web dashboard with CSV export. Manual control remains available for bench tests.
+- Phase 9 hardware validation checklist at [data/test-results/phase9-validation-checklist.md](../data/test-results/phase9-validation-checklist.md)
 - GPIO and fieldbus map at [hardware/wiring/esp32-gpio-map.md](../hardware/wiring/esp32-gpio-map.md)
 - Placeholder folders for schematics, PCB, mechanical, calibration data, test results, and tests
 
-Next implementation step: **Phase 8 — Local Web Dashboard.**
+Next implementation step: **Phase 9 — Validation** (dry run → empty chamber → small batch → 10 kg).
 
 ---
 
@@ -230,7 +232,7 @@ Default process settings:
 
 # 6. Firmware Layout
 
-## 6.1 As-built (Phases 0–7)
+## 6.1 As-built (Phases 0–8)
 
 Low-level drivers live under `firmware/components/`, not under `main/drivers/`.
 
@@ -387,7 +389,7 @@ IDLE -> PRECHECK -> DRYING -> COOLING -> DISCHARGING -> COMPLETE
 
 # 8. Build Order
 
-Phases 0–7 firmware is in the tree. Phases 1–4 hardware bench is complete (board, RTC, 2× XY-MD03, N4D8B08, ADS1115 moisture/EC). Phase 8 (read-only local web dashboard) is next. Keep heater power disconnected until Phase 5 safety tests pass.
+Phases 0–8 firmware is in the tree. Phases 1–4 hardware bench is complete (board, RTC, 2× XY-MD03, N4D8B08, ADS1115 moisture/EC). Phase 9 hardware validation is next — see `data/test-results/phase9-validation-checklist.md`. Keep heater power disconnected until Phase 5 safety tests pass.
 
 ## Phase 0 — Repository Skeleton
 
@@ -651,6 +653,8 @@ UX redesign:
 
 ## Phase 8 — Local Web Dashboard
 
+Firmware for SoftAP + read-only HTTP dashboard is in the tree (`services/web_server/`).
+
 Tasks:
 
 1. Start Wi-Fi AP `RiceDryer-XXXX`
@@ -661,15 +665,15 @@ Tasks:
 Acceptance:
 
 ```text
-[ ] Phone or laptop can join the AP without internet
-[ ] Status and sensors update
-[ ] CSV download works
-[ ] No web endpoint can move an actuator
+[x] SoftAP + GET API + dashboard HTML in firmware
+[x] CSV export streams from /sdcard (path-validated)
+[x] No web endpoint can move an actuator (GET-only; POST/PUT/DELETE rejected)
+[ ] Phone or laptop join / live update soak on hardware
 ```
 
 ## Phase 9 — Validation
 
-Progress from low risk to full capacity:
+Progress from low risk to full capacity. Use the checklist at `data/test-results/phase9-validation-checklist.md`.
 
 ```text
 Dry run with forced/simulated sensors
@@ -840,11 +844,11 @@ The project is ready for normal operation when:
 
 # 13. Immediate Next Step
 
-Start **Phase 8**:
+Start **Phase 9** hardware validation using [data/test-results/phase9-validation-checklist.md](../data/test-results/phase9-validation-checklist.md):
 
-1. Start Wi-Fi AP `RiceDryer-XXXX`
-2. Serve read-only dashboard at `192.168.4.1`
-3. Implement the locked GET API
-4. Stream CSV export from the SD card
+1. Dry run with forced/simulated sensors (include SoftAP dashboard check)
+2. Empty chamber heat test (only after Phase 5 safety tests pass)
+3. Small rice batch with moisture calibration vs reference meter
+4. 10 kg validation batch
 
-Phase 7 logger and product HMI are in the tree as a functional baseline. HMI UX redesign is deferred — see [07-hmi-ux-notes.md](07-hmi-ux-notes.md). Keep Manual Control available for bench tests. Do not connect the high-power heater until Phase 5 safety tests pass.
+Phase 8 SoftAP web dashboard is in the tree. Keep Manual Control available for bench tests. Do not connect the high-power heater until Phase 5 safety tests pass.

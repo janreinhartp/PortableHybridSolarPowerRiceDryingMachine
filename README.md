@@ -906,12 +906,13 @@ Phase 4 moisture/EC bench COMPLETE (ADS1115 path)
 Firmware Phase 5          IN TREE
 Firmware Phase 6          IN TREE
 Firmware Phase 7          IN TREE
+Firmware Phase 8          IN TREE
 Hardware Integration      NOT STARTED
-Dry Run                   NOT STARTED
-Rice Validation           NOT STARTED
+Dry Run                   NOT STARTED (checklist ready)
+Rice Validation           NOT STARTED (checklist ready)
 ```
 
-Firmware through Phase 7 (Process Controller, Batch Manager, SD logger, product HMI) is in `firmware/`. The operator SCADA HMI redesign is implemented per [`docs/08-hmi-design-guideline.md`](docs/08-hmi-design-guideline.md) (baseline UX debt history in [`docs/07-hmi-ux-notes.md`](docs/07-hmi-ux-notes.md)). Phases 1–4 hardware bench is confirmed. The next implementation step is Phase 8 (read-only local web dashboard) in [`docs/MASTERPLAN.md`](docs/MASTERPLAN.md).
+Firmware through Phase 8 (Process Controller, Batch Manager, SD logger, product HMI, SoftAP read-only web dashboard) is in `firmware/`. The operator SCADA HMI redesign is implemented per [`docs/08-hmi-design-guideline.md`](docs/08-hmi-design-guideline.md) (baseline UX debt history in [`docs/07-hmi-ux-notes.md`](docs/07-hmi-ux-notes.md)). Phases 1–4 hardware bench is confirmed. The next step is Phase 9 hardware validation — see [`data/test-results/phase9-validation-checklist.md`](data/test-results/phase9-validation-checklist.md) and [`docs/MASTERPLAN.md`](docs/MASTERPLAN.md).
 
 ---
 
@@ -1192,13 +1193,16 @@ PortableHybridSolarPowerRiceDryingMachine/
 
 # 35. Getting Started
 
-Firmware through Phase 7 is already in `firmware/`. Continue with:
+Firmware through Phase 8 is already in `firmware/`. Continue with Phase 9 hardware validation:
 
 ```text
-1. Phase 8 — Wi-Fi AP RiceDryer-XXXX
-2. Read-only dashboard at 192.168.4.1
-3. Locked GET API and CSV export from the SD card
+1. Dry run (sensors / SoftAP / HMI)
+2. Empty chamber heat test
+3. Small rice batch + moisture calibration
+4. 10 kg validation batch
 ```
+
+Checklist: [`data/test-results/phase9-validation-checklist.md`](data/test-results/phase9-validation-checklist.md).
 
 Do not connect the high-power heater until Phase 5 safety tests pass.
 
@@ -1210,12 +1214,10 @@ Follow the execution order in:
 
 [`docs/MASTERPLAN.md`](docs/MASTERPLAN.md)
 
-Phases 0–7 firmware is in the tree (board bring-up, RTC, RS485/Modbus, ADS1115, Sensor/Actuator/Safety/Settings/Circulation managers, Process Controller, Batch Manager, SD logger, and the product SCADA HMI). HMI redesign status: [`docs/08-hmi-design-guideline.md`](docs/08-hmi-design-guideline.md). Phases 1–4 hardware bench is complete.
+Phases 0–8 firmware is in the tree (board bring-up, RTC, RS485/Modbus, ADS1115, Sensor/Actuator/Safety/Settings/Circulation managers, Process Controller, Batch Manager, SD logger, product SCADA HMI, and SoftAP read-only web dashboard). HMI redesign status: [`docs/08-hmi-design-guideline.md`](docs/08-hmi-design-guideline.md). Phases 1–4 hardware bench is complete.
 
-The next milestone is Phase 8:
+The next milestone is Phase 9:
 
 ```text
-Local Wi-Fi AP
-   +
-Read-only web dashboard
+Dry run → empty chamber → small batch → 10 kg
 ```

@@ -6,6 +6,7 @@
 #include "nvs_flash.h"
 #include "process_controller.h"
 #include "ui_manager.h"
+#include "web_server.h"
 
 static const char *TAG = "main";
 
@@ -48,7 +49,7 @@ static void runtime_status_task(void *arg)
 
 extern "C" void app_main(void)
 {
-    ESP_LOGI(TAG, "Hybrid Solar Power Rice Dryer firmware starting (Phase 7)");
+    ESP_LOGI(TAG, "Hybrid Solar Power Rice Dryer firmware starting (Phase 8)");
 
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -69,6 +70,16 @@ extern "C" void app_main(void)
         board_hal_lvgl_unlock();
     }
 
+    /* Soft-fail: dryer still runs if SoftAP/HTTP cannot start. */
+    if (web_server_start(&s_status) == ESP_OK) {
+        s_status.wifi_ok = true;
+        web_server_copy_ssid(s_status.wifi_ssid, sizeof(s_status.wifi_ssid));
+    } else {
+        s_status.wifi_ok = false;
+        s_status.wifi_ssid[0] = '\0';
+        ESP_LOGW(TAG, "Phase 8 web dashboard unavailable");
+    }
+
     xTaskCreate(runtime_status_task, "runtime_status", 8192, nullptr, 3, nullptr);
-    ESP_LOGI(TAG, "Phase 7 running (logger + product HMI)");
+    ESP_LOGI(TAG, "Phase 8 running (logger + HMI + local web)");
 }

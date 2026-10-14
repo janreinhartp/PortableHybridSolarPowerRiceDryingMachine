@@ -13,6 +13,7 @@ idf_component_register(
         "services/settings_manager/settings_manager.cpp"
         "services/circulation_manager/circulation_manager.cpp"
         "services/logger/logger.cpp"
+        "services/web_server/web_server.cpp"
         "ui/theme/ui_theme.cpp"
         "ui/widgets/ui_widgets.cpp"
         "ui/trend_buffer/trend_buffer.cpp"
@@ -43,6 +44,7 @@ idf_component_register(
         "services/settings_manager"
         "services/circulation_manager"
         "services/logger"
+        "services/web_server"
         "ui/theme"
         "ui/widgets"
         "ui/trend_buffer"
@@ -62,6 +64,10 @@ idf_component_register(
     REQUIRES
         nvs_flash
         esp_timer
+        esp_wifi
+        esp_netif
+        esp_event
+        esp_http_server
         rgb_lcd_port
         touch
         lvgl_port

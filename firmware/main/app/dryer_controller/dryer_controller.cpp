@@ -52,7 +52,7 @@ esp_err_t dryer_controller_init(system_status_t *status)
     *status = {};
     refresh_heap(status);
 
-    ESP_LOGI(TAG, "Phase 7 bring-up starting");
+    ESP_LOGI(TAG, "Phase 8 bring-up starting");
 
     board_hal_status_t board {};
     esp_err_t err = board_hal_init(&board);
