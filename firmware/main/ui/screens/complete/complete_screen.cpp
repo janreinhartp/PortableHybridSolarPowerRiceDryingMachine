@@ -41,26 +41,26 @@ void complete_build(lv_obj_t *parent, const system_status_t *status)
 {
     lv_obj_t *title =
         ui_theme_make_label(parent, "Batch Complete", ui_font_title(), UI_COLOR_TEAL);
-    lv_obj_set_pos(title, 8, 4);
+    lv_obj_set_pos(title, 0, 0);
 
-    s_batch = ui_kpi_create(parent, "Batch", 230, 90);
-    lv_obj_set_pos(s_batch.root, 8, 44);
-    s_moist = ui_kpi_create(parent, "Moisture", 230, 90);
-    lv_obj_set_pos(s_moist.root, 256, 44);
-    s_temp = ui_kpi_create(parent, "Max Chamber", 230, 90);
-    lv_obj_set_pos(s_temp.root, 504, 44);
-    s_time = ui_kpi_create(parent, "Drying Time", 230, 90);
-    lv_obj_set_pos(s_time.root, 752, 44);
+    s_batch = ui_kpi_create(parent, "Batch", 236, 120);
+    lv_obj_set_pos(s_batch.root, 0, 48);
+    s_moist = ui_kpi_create(parent, "Moisture", 236, 120);
+    lv_obj_set_pos(s_moist.root, 252, 48);
+    s_temp = ui_kpi_create(parent, "Max Chamber", 236, 120);
+    lv_obj_set_pos(s_temp.root, 504, 48);
+    s_time = ui_kpi_create(parent, "Drying Time", 236, 120);
+    lv_obj_set_pos(s_time.root, 756, 48);
 
-    s_trend = ui_trend_create(parent, 980, 180);
-    lv_obj_set_pos(s_trend.root, 8, 150);
+    s_trend = ui_trend_create(parent, 992, 152);
+    lv_obj_set_pos(s_trend.root, 0, 184);
 
-    lv_obj_t *again =
-        ui_theme_make_btn(parent, "New Batch", on_new, nullptr, 200, 64, UI_COLOR_TEAL);
-    lv_obj_set_pos(again, 8, 350);
     lv_obj_t *hist =
-        ui_theme_make_btn(parent, "History", on_history, nullptr, 180, 64, UI_COLOR_ACCENT);
-    lv_obj_set_pos(hist, 224, 350);
+        ui_theme_make_btn(parent, "History", on_history, nullptr, 488, 64, UI_COLOR_SURFACE_ALT);
+    lv_obj_set_pos(hist, 0, 352);
+    lv_obj_t *again =
+        ui_theme_make_btn(parent, "New Batch", on_new, nullptr, 488, 64, UI_COLOR_TEAL);
+    lv_obj_set_pos(again, 504, 352);
 
     s_alive = true;
     complete_update(status);
@@ -74,10 +74,10 @@ void complete_update(const system_status_t *status)
     char buf[64];
     snprintf(buf, sizeof(buf), "%s", status->batch_id[0] ? status->batch_id : "-");
     ui_kpi_set(&s_batch, buf);
-    snprintf(buf, sizeof(buf), "%.1f -> %.1f %%", status->initial_moisture_pct,
+    snprintf(buf, sizeof(buf), "%.1f → %.1f %%", status->initial_moisture_pct,
              status->final_moisture_pct);
     ui_kpi_set(&s_moist, buf);
-    snprintf(buf, sizeof(buf), "%.1f C", status->max_chamber_temp_c);
+    snprintf(buf, sizeof(buf), "%.1f °C", status->max_chamber_temp_c);
     ui_kpi_set(&s_temp, buf);
     ui_format_hms(buf, sizeof(buf), status->drying_elapsed_s);
     ui_kpi_set(&s_time, buf);

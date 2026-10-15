@@ -3,14 +3,58 @@
 #include <cstdio>
 #include <cstring>
 
+#include "process_controller.h"
 #include "screen_common.h"
 #include "trend_buffer.h"
 #include "ui_theme.h"
 
-ui_gauge_t ui_gauge_create(lv_obj_t *parent, const char *title, const char *unit, int16_t min_v,
-                           int16_t max_v, lv_coord_t size)
+ui_metric_t ui_metric_create(lv_obj_t *parent, const char *title, lv_coord_t w, lv_coord_t h)
 {
-    ui_gauge_t g {};
+    ui_metric_t m {};
+    m.root = ui_theme_make_card(parent, w, h);
+    lv_obj_set_style_pad_all(m.root, 16, 0);
+
+    m.title_lbl = ui_theme_make_label(m.root, title, ui_font_body(), UI_COLOR_MUTED);
+    lv_obj_align(m.title_lbl, LV_ALIGN_TOP_LEFT, 0, 0);
+
+    m.value_lbl = ui_theme_make_label(m.root, "-", ui_font_kpi(), UI_COLOR_CREAM);
+    lv_obj_align(m.value_lbl, LV_ALIGN_TOP_LEFT, 0, 36);
+
+    m.unit_lbl = ui_theme_make_label(m.root, "", ui_font_body(), UI_COLOR_CREAM);
+    lv_obj_align(m.unit_lbl, LV_ALIGN_TOP_LEFT, 0, 52);
+
+    m.detail_lbl = ui_theme_make_label(m.root, "", ui_font_caption(), UI_COLOR_MUTED);
+    lv_obj_set_width(m.detail_lbl, w - 32);
+    lv_label_set_long_mode(m.detail_lbl, LV_LABEL_LONG_DOT);
+    lv_obj_align(m.detail_lbl, LV_ALIGN_BOTTOM_LEFT, 0, 0);
+    return m;
+}
+
+void ui_metric_set(ui_metric_t *m, const char *value, const char *unit, const char *detail)
+{
+    if (m == nullptr || m->value_lbl == nullptr) {
+        return;
+    }
+    lv_label_set_text(m->value_lbl, value != nullptr ? value : "-");
+    if (m->unit_lbl != nullptr) {
+        lv_label_set_text(m->unit_lbl, unit != nullptr ? unit : "");
+        if (unit != nullptr && unit[0] != '\0') {
+            lv_obj_align_to(m->unit_lbl, m->value_lbl, LV_ALIGN_OUT_RIGHT_BOTTOM, 6, 0);
+            lv_obj_clear_flag(m->unit_lbl, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(m->unit_lbl, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+    if (m->detail_lbl != nullptr) {
+        lv_label_set_text(m->detail_lbl, detail != nullptr ? detail : "");
+    }
+}
+
+ui_bar_gauge_t ui_bar_gauge_create(lv_obj_t *parent, const char *title, const char *unit,
+                                   int16_t min_v, int16_t max_v, lv_coord_t w, lv_coord_t h,
+                                   uint32_t fill_hex)
+{
+    ui_bar_gauge_t g {};
     g.min_v = min_v;
     g.max_v = max_v;
     if (unit != nullptr) {
@@ -19,43 +63,48 @@ ui_gauge_t ui_gauge_create(lv_obj_t *parent, const char *title, const char *unit
         g.unit[0] = '\0';
     }
 
-    /* Extra bottom room for live value + Target line. */
-    g.root = ui_theme_make_card(parent, size + 24, size + 92);
-    g.title_lbl = ui_theme_make_label(g.root, title, ui_font_caption(), UI_COLOR_MUTED);
-    lv_obj_align(g.title_lbl, LV_ALIGN_TOP_MID, 0, 0);
+    g.root = ui_theme_make_card(parent, w, h);
+    g.title_lbl = ui_theme_make_label(g.root, title, ui_font_body(), UI_COLOR_TEXT);
+    lv_obj_align(g.title_lbl, LV_ALIGN_TOP_LEFT, 0, 0);
 
-    g.meter = lv_meter_create(g.root);
-    lv_obj_set_size(g.meter, size, size);
-    lv_obj_align(g.meter, LV_ALIGN_TOP_MID, 0, 20);
-    lv_obj_set_style_bg_color(g.meter, ui_theme_color(UI_COLOR_SURFACE_ALT), 0);
-    lv_obj_set_style_border_width(g.meter, 0, 0);
-
-    lv_meter_scale_t *scale = lv_meter_add_scale(g.meter);
-    lv_meter_set_scale_ticks(g.meter, scale, 21, 2, 8, ui_theme_color(UI_COLOR_BORDER));
-    lv_meter_set_scale_major_ticks(g.meter, scale, 5, 3, 12, ui_theme_color(UI_COLOR_MUTED), 12);
-    lv_meter_set_scale_range(g.meter, scale, min_v, max_v, 270, 135);
-
-    lv_meter_indicator_t *arc = lv_meter_add_arc(g.meter, scale, 6, ui_theme_color(UI_COLOR_ACCENT), 0);
-    lv_meter_set_indicator_start_value(g.meter, arc, min_v);
-    lv_meter_set_indicator_end_value(g.meter, arc, max_v);
-
-    g.needle = lv_meter_add_needle_line(g.meter, scale, 3, ui_theme_color(UI_COLOR_AMBER), -8);
-
-    g.value_lbl = ui_theme_make_label(g.root, "-", ui_font_kpi(), UI_COLOR_TEXT);
-    lv_obj_align(g.value_lbl, LV_ALIGN_BOTTOM_MID, 0, -28);
+    g.value_lbl = ui_theme_make_label(g.root, "-", ui_font_kpi(), UI_COLOR_CREAM);
+    lv_obj_align(g.value_lbl, LV_ALIGN_TOP_LEFT, 0, 28);
 
     g.target_lbl = ui_theme_make_label(g.root, "", ui_font_caption(), UI_COLOR_MUTED);
-    lv_obj_set_width(g.target_lbl, size + 4);
-    lv_label_set_long_mode(g.target_lbl, LV_LABEL_LONG_DOT);
-    lv_obj_set_style_text_align(g.target_lbl, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(g.target_lbl, LV_ALIGN_BOTTOM_MID, 0, -2);
+    lv_obj_align(g.target_lbl, LV_ALIGN_TOP_RIGHT, 0, 40);
     lv_obj_add_flag(g.target_lbl, LV_OBJ_FLAG_HIDDEN);
+
+    g.bar_w = (lv_coord_t)(w - 40);
+    g.bar = lv_bar_create(g.root);
+    lv_obj_set_size(g.bar, g.bar_w, 8);
+    lv_obj_align(g.bar, LV_ALIGN_TOP_LEFT, 0, 80);
+    lv_bar_set_range(g.bar, min_v, max_v);
+    lv_obj_set_style_bg_color(g.bar, ui_theme_color(UI_COLOR_BORDER), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(g.bar, ui_theme_color(fill_hex), LV_PART_INDICATOR);
+    lv_obj_set_style_radius(g.bar, 4, LV_PART_MAIN);
+    lv_obj_set_style_radius(g.bar, 4, LV_PART_INDICATOR);
+
+    g.marker = lv_obj_create(g.root);
+    lv_obj_set_size(g.marker, 2, 12);
+    lv_obj_set_style_bg_color(g.marker, ui_theme_color(UI_COLOR_TEXT), 0);
+    lv_obj_set_style_border_width(g.marker, 0, 0);
+    lv_obj_set_style_radius(g.marker, 0, 0);
+    lv_obj_clear_flag(g.marker, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(g.marker, LV_OBJ_FLAG_HIDDEN);
+
+    char range[32];
+    snprintf(range, sizeof(range), "%d %s", (int)min_v, g.unit);
+    lv_obj_t *min_lbl = ui_theme_make_label(g.root, range, ui_font_caption(), UI_COLOR_MUTED);
+    lv_obj_align(min_lbl, LV_ALIGN_BOTTOM_LEFT, 0, 0);
+    snprintf(range, sizeof(range), "%d %s", (int)max_v, g.unit);
+    lv_obj_t *max_lbl = ui_theme_make_label(g.root, range, ui_font_caption(), UI_COLOR_MUTED);
+    lv_obj_align(max_lbl, LV_ALIGN_BOTTOM_RIGHT, 0, 0);
     return g;
 }
 
-void ui_gauge_set(ui_gauge_t *g, float value)
+void ui_bar_gauge_set(ui_bar_gauge_t *g, float value)
 {
-    if (g == nullptr || g->meter == nullptr) {
+    if (g == nullptr || g->bar == nullptr) {
         return;
     }
     int16_t v = (int16_t)(value + (value >= 0 ? 0.5f : -0.5f));
@@ -65,7 +114,7 @@ void ui_gauge_set(ui_gauge_t *g, float value)
     if (v > g->max_v) {
         v = g->max_v;
     }
-    lv_meter_set_indicator_value(g->meter, g->needle, v);
+    lv_bar_set_value(g->bar, v, LV_ANIM_OFF);
     char buf[28];
     if (g->unit[0] != '\0') {
         snprintf(buf, sizeof(buf), "%.1f %s", value, g->unit);
@@ -75,13 +124,16 @@ void ui_gauge_set(ui_gauge_t *g, float value)
     lv_label_set_text(g->value_lbl, buf);
 }
 
-void ui_gauge_set_target(ui_gauge_t *g, bool show, float target)
+void ui_bar_gauge_set_target(ui_bar_gauge_t *g, bool show, float target)
 {
     if (g == nullptr || g->target_lbl == nullptr) {
         return;
     }
     if (!show) {
         lv_obj_add_flag(g->target_lbl, LV_OBJ_FLAG_HIDDEN);
+        if (g->marker != nullptr) {
+            lv_obj_add_flag(g->marker, LV_OBJ_FLAG_HIDDEN);
+        }
         return;
     }
     char buf[36];
@@ -92,6 +144,38 @@ void ui_gauge_set_target(ui_gauge_t *g, bool show, float target)
     }
     lv_label_set_text(g->target_lbl, buf);
     lv_obj_clear_flag(g->target_lbl, LV_OBJ_FLAG_HIDDEN);
+
+    if (g->marker != nullptr && g->max_v > g->min_v) {
+        float t = target;
+        if (t < g->min_v) {
+            t = (float)g->min_v;
+        }
+        if (t > g->max_v) {
+            t = (float)g->max_v;
+        }
+        const float span = (float)(g->max_v - g->min_v);
+        const lv_coord_t x =
+            (lv_coord_t)(((t - (float)g->min_v) / span) * (float)g->bar_w);
+        lv_obj_align(g->marker, LV_ALIGN_TOP_LEFT, x, 78);
+        lv_obj_clear_flag(g->marker, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+ui_gauge_t ui_gauge_create(lv_obj_t *parent, const char *title, const char *unit, int16_t min_v,
+                           int16_t max_v, lv_coord_t size)
+{
+    (void)size;
+    return ui_bar_gauge_create(parent, title, unit, min_v, max_v, 328, 128, UI_COLOR_TEAL);
+}
+
+void ui_gauge_set(ui_gauge_t *g, float value)
+{
+    ui_bar_gauge_set(g, value);
+}
+
+void ui_gauge_set_target(ui_gauge_t *g, bool show, float target)
+{
+    ui_bar_gauge_set_target(g, show, target);
 }
 
 ui_kpi_t ui_kpi_create(lv_obj_t *parent, const char *title, lv_coord_t w, lv_coord_t h)
@@ -100,7 +184,7 @@ ui_kpi_t ui_kpi_create(lv_obj_t *parent, const char *title, lv_coord_t w, lv_coo
     k.root = ui_theme_make_card(parent, w, h);
     k.title = ui_theme_make_label(k.root, title, ui_font_caption(), UI_COLOR_MUTED);
     lv_obj_align(k.title, LV_ALIGN_TOP_LEFT, 0, 0);
-    k.value = ui_theme_make_label(k.root, "-", ui_font_title(), UI_COLOR_TEXT);
+    k.value = ui_theme_make_label(k.root, "-", ui_font_title(), UI_COLOR_CREAM);
     lv_obj_align(k.value, LV_ALIGN_BOTTOM_LEFT, 0, 0);
     return k;
 }
@@ -117,25 +201,30 @@ ui_trend_t ui_trend_create(lv_obj_t *parent, lv_coord_t w, lv_coord_t h)
 {
     ui_trend_t t {};
     t.root = ui_theme_make_card(parent, w, h);
-    lv_obj_t *title = ui_theme_make_label(t.root, "Trend Moisture + Chamber", ui_font_caption(),
-                                          UI_COLOR_MUTED);
+    lv_obj_set_style_pad_all(t.root, 16, 0);
+
+    lv_obj_t *title =
+        ui_theme_make_label(t.root, "Live Trend · Last 5 Minutes", ui_font_body(), UI_COLOR_TEXT);
     lv_obj_align(title, LV_ALIGN_TOP_LEFT, 0, 0);
+    lv_obj_t *legend = ui_theme_make_label(t.root, "Moisture  /  Chamber", ui_font_caption(),
+                                           UI_COLOR_MUTED);
+    lv_obj_align(legend, LV_ALIGN_TOP_RIGHT, 0, 2);
 
     t.chart = lv_chart_create(t.root);
-    lv_obj_set_size(t.chart, w - 28, h - 44);
+    lv_obj_set_size(t.chart, w - 48, h - 56);
     lv_obj_align(t.chart, LV_ALIGN_BOTTOM_MID, 0, 0);
-    lv_obj_set_style_bg_color(t.chart, ui_theme_color(UI_COLOR_SURFACE_ALT), 0);
+    lv_obj_set_style_bg_color(t.chart, ui_theme_color(UI_COLOR_SURFACE), 0);
     lv_obj_set_style_border_width(t.chart, 0, 0);
     lv_chart_set_type(t.chart, LV_CHART_TYPE_LINE);
     lv_chart_set_point_count(t.chart, TREND_POINTS);
     lv_chart_set_range(t.chart, LV_CHART_AXIS_PRIMARY_Y, 0, 80);
-    lv_chart_set_div_line_count(t.chart, 4, 6);
+    lv_chart_set_div_line_count(t.chart, 3, 4);
     lv_obj_set_style_line_color(t.chart, ui_theme_color(UI_COLOR_BORDER), LV_PART_MAIN);
 
-    t.ser_moist = lv_chart_add_series(t.chart, ui_theme_color(UI_COLOR_ACCENT),
-                                      LV_CHART_AXIS_PRIMARY_Y);
-    t.ser_chamber = lv_chart_add_series(t.chart, ui_theme_color(UI_COLOR_AMBER),
-                                        LV_CHART_AXIS_PRIMARY_Y);
+    t.ser_moist =
+        lv_chart_add_series(t.chart, ui_theme_color(UI_COLOR_CREAM), LV_CHART_AXIS_PRIMARY_Y);
+    t.ser_chamber =
+        lv_chart_add_series(t.chart, ui_theme_color(UI_COLOR_AMBER), LV_CHART_AXIS_PRIMARY_Y);
     return t;
 }
 
@@ -156,22 +245,53 @@ void ui_trend_refresh(ui_trend_t *t)
     lv_chart_refresh(t->chart);
 }
 
+static void fill_actuator_card(lv_obj_t *card, lv_obj_t **led, lv_obj_t **status,
+                               lv_obj_t **label, const char *name, bool horizontal)
+{
+    *label = ui_theme_make_label(card, name, ui_font_body(),
+                                 horizontal ? UI_COLOR_TEXT : UI_COLOR_MUTED);
+    *led = lv_obj_create(card);
+    lv_obj_set_size(*led, 12, 12);
+    lv_obj_set_style_radius(*led, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_border_width(*led, 0, 0);
+    lv_obj_set_style_bg_color(*led, ui_theme_color(UI_COLOR_BORDER), 0);
+    lv_obj_clear_flag(*led, LV_OBJ_FLAG_SCROLLABLE);
+    *status = ui_theme_make_label(card, "OFF", ui_font_body(), UI_COLOR_DIM);
+
+    if (horizontal) {
+        lv_obj_align(*label, LV_ALIGN_LEFT_MID, 0, 0);
+        lv_obj_align(*status, LV_ALIGN_RIGHT_MID, 0, 0);
+        lv_obj_align_to(*led, *status, LV_ALIGN_OUT_LEFT_MID, -8, 0);
+    } else {
+        lv_obj_align(*label, LV_ALIGN_TOP_LEFT, 0, 0);
+        lv_obj_align(*led, LV_ALIGN_BOTTOM_LEFT, 0, -4);
+        lv_obj_align_to(*status, *led, LV_ALIGN_OUT_RIGHT_MID, 8, 0);
+    }
+}
+
 ui_actuator_leds_t ui_leds_create(lv_obj_t *parent, lv_coord_t w)
 {
+    return ui_actuator_row_create(parent, w, 112);
+}
+
+ui_actuator_leds_t ui_actuator_row_create(lv_obj_t *parent, lv_coord_t w, lv_coord_t h)
+{
     ui_actuator_leds_t leds {};
-    leds.root = ui_theme_make_card(parent, w, 72);
+    leds.root = lv_obj_create(parent);
+    lv_obj_set_size(leds.root, w, h);
+    lv_obj_set_style_bg_opa(leds.root, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(leds.root, 0, 0);
+    lv_obj_set_style_pad_all(leds.root, 0, 0);
+    lv_obj_clear_flag(leds.root, LV_OBJ_FLAG_SCROLLABLE);
+
     static const char *names[] = {"Heater", "Fan", "Elevator", "Door"};
-    const lv_coord_t slot = w / 4;
+    const bool tall = h >= 100;
+    const lv_coord_t slot_w = (lv_coord_t)((w - 24) / 4);
+    const lv_coord_t card_h = tall ? h : h;
     for (int i = 0; i < 4; ++i) {
-        leds.leds[i] = lv_obj_create(leds.root);
-        lv_obj_set_size(leds.leds[i], 18, 18);
-        lv_obj_set_style_radius(leds.leds[i], LV_RADIUS_CIRCLE, 0);
-        lv_obj_set_style_border_width(leds.leds[i], 0, 0);
-        lv_obj_set_style_bg_color(leds.leds[i], ui_theme_color(UI_COLOR_BORDER), 0);
-        lv_obj_set_pos(leds.leds[i], (lv_coord_t)(i * slot + 8), 8);
-        leds.labels[i] =
-            ui_theme_make_label(leds.root, names[i], ui_font_caption(), UI_COLOR_MUTED);
-        lv_obj_set_pos(leds.labels[i], (lv_coord_t)(i * slot + 8), 36);
+        lv_obj_t *card = ui_theme_make_card(leds.root, slot_w, card_h);
+        lv_obj_set_pos(card, (lv_coord_t)(i * (slot_w + 8)), 0);
+        fill_actuator_card(card, &leds.leds[i], &leds.status[i], &leds.labels[i], names[i], !tall);
     }
     return leds;
 }
@@ -187,25 +307,72 @@ void ui_leds_set(ui_actuator_leds_t *leds, const system_status_t *status)
         status->relay_elevator,
         status->relay_door_open,
     };
-    const uint32_t colors[4] = {UI_COLOR_HEATER, UI_COLOR_GREEN, UI_COLOR_ACCENT, UI_COLOR_ORANGE};
+    const char *text[4] = {
+        on[0] ? "ON" : "OFF",
+        on[1] ? "ON" : "OFF",
+        on[2] ? "RUNNING" : "OFF",
+        status->relay_door_open ? "OPEN" : "CLOSED",
+    };
+    const uint32_t colors[4] = {UI_COLOR_HEATER, UI_COLOR_TEAL_SOFT, UI_COLOR_TEAL_SOFT,
+                                UI_COLOR_DIM};
     for (int i = 0; i < 4; ++i) {
-        lv_obj_set_style_bg_color(leds->leds[i],
-                                  ui_theme_color(on[i] ? colors[i] : UI_COLOR_BORDER), 0);
+        const bool active = (i == 3) ? status->relay_door_open : on[i];
+        const uint32_t c = active ? colors[i] : UI_COLOR_DIM;
+        if (leds->leds[i] != nullptr) {
+            lv_obj_set_style_bg_color(leds->leds[i],
+                                      ui_theme_color(active ? colors[i] : UI_COLOR_BORDER), 0);
+        }
+        if (leds->status[i] != nullptr) {
+            lv_label_set_text(leds->status[i], text[i]);
+            lv_obj_set_style_text_color(leds->status[i], ui_theme_color(c), 0);
+        }
+    }
+}
+
+static const char *state_chip_text(uint8_t dryer_state)
+{
+    switch ((dryer_state_t)dryer_state) {
+    case DRYER_STATE_PRECHECK:
+        return "PRECHECK";
+    case DRYER_STATE_DRYING:
+        return "DRYING";
+    case DRYER_STATE_COOLING:
+        return "COOLING";
+    case DRYER_STATE_DISCHARGING:
+        return "DISCHARGE";
+    case DRYER_STATE_COMPLETE:
+        return "COMPLETE";
+    case DRYER_STATE_FAULT:
+        return "FAULT";
+    case DRYER_STATE_IDLE:
+    default:
+        return "IDLE";
     }
 }
 
 lv_obj_t *ui_state_chip_create(lv_obj_t *parent)
 {
     lv_obj_t *chip = lv_obj_create(parent);
-    lv_obj_set_size(chip, 140, 36);
-    lv_obj_set_style_radius(chip, 18, 0);
+    lv_obj_set_size(chip, 160, 40);
+    lv_obj_set_style_radius(chip, 4, 0);
     lv_obj_set_style_bg_color(chip, ui_theme_color(UI_COLOR_SURFACE_ALT), 0);
-    lv_obj_set_style_border_width(chip, 0, 0);
-    lv_obj_set_style_pad_hor(chip, 12, 0);
+    lv_obj_set_style_border_color(chip, ui_theme_color(UI_COLOR_BORDER), 0);
+    lv_obj_set_style_border_width(chip, 1, 0);
+    lv_obj_set_style_pad_hor(chip, 8, 0);
     lv_obj_clear_flag(chip, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_t *lbl = ui_theme_make_label(chip, "Idle", ui_font_body(), UI_COLOR_TEXT);
-    lv_obj_center(lbl);
+
+    lv_obj_t *dot = lv_obj_create(chip);
+    lv_obj_set_size(dot, 8, 8);
+    lv_obj_set_style_radius(dot, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_border_width(dot, 0, 0);
+    lv_obj_set_style_bg_color(dot, ui_theme_color(UI_COLOR_DIM), 0);
+    lv_obj_clear_flag(dot, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_align(dot, LV_ALIGN_LEFT_MID, 4, 0);
+
+    lv_obj_t *lbl = ui_theme_make_label(chip, "IDLE", ui_font_body(), UI_COLOR_DIM);
+    lv_obj_align(lbl, LV_ALIGN_CENTER, 8, 0);
     lv_obj_set_user_data(chip, lbl);
+    lv_obj_set_user_data(lbl, dot);
     return chip;
 }
 
@@ -215,11 +382,17 @@ void ui_state_chip_set(lv_obj_t *chip, uint8_t dryer_state)
         return;
     }
     lv_obj_t *lbl = (lv_obj_t *)lv_obj_get_user_data(chip);
+    const lv_color_t color = ui_theme_state_color(dryer_state);
     if (lbl != nullptr) {
-        lv_label_set_text(lbl, ui_state_title(dryer_state));
-        lv_obj_set_style_text_color(lbl, ui_theme_color(UI_COLOR_ON_PRIMARY), 0);
+        lv_label_set_text(lbl, state_chip_text(dryer_state));
+        lv_obj_set_style_text_color(lbl, color, 0);
+        lv_obj_t *dot = (lv_obj_t *)lv_obj_get_user_data(lbl);
+        if (dot != nullptr) {
+            lv_obj_set_style_bg_color(dot, color, 0);
+        }
     }
-    lv_obj_set_style_bg_color(chip, ui_theme_state_color(dryer_state), 0);
+    lv_obj_set_style_border_color(chip, color, 0);
+    lv_obj_set_style_bg_color(chip, ui_theme_color(UI_COLOR_SURFACE_ALT), 0);
 }
 
 typedef struct {

@@ -1,6 +1,7 @@
 # HMI Design Guideline — Modern SCADA
 
-**Status:** Active and **implemented** in `firmware/main/ui/` (light industrial SCADA redesign).  
+**Status:** Active and **implemented** in `firmware/main/ui/` (Figma Rice Dryer Design port).  
+**Design source:** [Rice Dryer Design](https://www.figma.com/design/NQj2frIOuMvcB1I1deLPbU/Rice-Dryer-Design) (`NQj2frIOuMvcB1I1deLPbU`)  
 **Supersedes redesign guidance in:** [07-hmi-ux-notes.md](07-hmi-ux-notes.md)  
 **Panel:** Waveshare ESP32-S3 Touch LCD 7B — 1024 × 600, LVGL 8  
 **Code:** `firmware/main/ui/` (`theme/`, `widgets/`, `trend_buffer/`, `ui_manager/`, screens)
@@ -9,7 +10,7 @@
 
 ## 1. Purpose
 
-Defines the operator-ready SCADA look and interaction model: light industrial theme, large gauges with Target under live values, live trends, clear process screens, and a split between daily operator and technician paths.
+Defines the operator-ready SCADA look and interaction model: warm charcoal industrial theme, high-visibility live values, live trends, clear process screens, and a split between daily operator and technician paths.
 
 Architecture non-negotiables stay unchanged:
 
@@ -54,78 +55,83 @@ Sticky (no auto-leave): Manual, Settings, History, System, More, Commission.
 
 Legacy separate Drying / Cooling / Discharge screens are no longer in the build; Run replaces them.
 
+No Power / Solar / Battery UI — those signals are not implemented in firmware.
+
 ---
 
 ## 4. Shell layout (implemented)
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
-│ State chip │ Batch ID │ Phase status │  Date + 12h clock     │
-│            │          │              │  Fault strip          │
+│ Brand · State chip · Batch/phase · Date + 12h clock  (88 px) │
+│ Fault strip (48 px, only when active_fault ≠ 0)              │
 ├──────────────────────────────────────────────────────────────┤
-│                    Content area                              │
+│ Content 1024×448 (or 1024×400 with fault strip)              │
 ├──────────────────────────────────────────────────────────────┤
-│   Home    │    Run    │   Alarms   │       More              │
+│ Home │ Run │ Alarms │ More                         (64 px)   │
 └──────────────────────────────────────────────────────────────┘
 ```
 
-- Phase status tracks process state live (Ready → Running Precheck → Drying → …)
-- Ephemeral operator messages (Start, Save, Acknowledge) appear in the phase slot, then clear on state change
-- Header clock: `Mon DD, YYYY  H:MM AM/PM` (12-hour with date)
-- Bottom nav has four primary items; More opens Settings / History / Manual / System
+- Header **88 px**: machine brand, ALL-CAPS state chip, batch ID + phase, date + clock
+- Content height **448 px** normal; **400 px** when the fault strip is visible
+- Bottom nav **64 px**: icon + label; selected tab = solid teal rounded pill
+- Phase status tracks process state live; ephemeral banners clear on state change
+- Header clock: date line + 12-hour time line
 
 ---
 
 ## 5. Visual system (implemented)
 
-### Palette (light industrial SCADA)
+### Palette (warm charcoal SCADA — Figma)
 
 | Token | Hex | Use |
 |---|---|---|
-| `bg` | `#F1F5F9` | Screen background |
-| `surface` | `#FFFFFF` | Cards / tiles |
-| `surface_alt` | `#E2E8F0` | Nested panels, nav buttons |
-| `border` | `#CBD5E1` | Card edges |
-| `text` | `#0F172A` | Primary text |
-| `text_muted` | `#475569` | Labels / secondary |
-| `accent` | `#0369A1` | Process / interactive |
-| `teal` | `#0F766E` | Healthy / complete |
-| `amber` | `#B45309` | Warning / drying heat |
-| `orange` | `#C2410C` | Discharge / attention |
-| `red` | `#B91C1C` | Fault / dangerous |
-| `green` | `#15803D` | Ready / OK LED |
-| `heater` | `#EA580C` | Heater ON accent |
-| `on_primary` | `#FFFFFF` | Text on saturated buttons / state chip |
-| `fault_bg` | `#FEE2E2` | Active fault card fill |
+| `bg` | `#171A19` | Screen background |
+| `surface` | `#222625` | Cards / tiles |
+| `surface_alt` | `#2B302E` | Nested panels, unselected nav |
+| `border` | `#3A403D` | Card edges |
+| `text` | `#F5F1E8` | Primary text |
+| `cream` | `#F2E8CF` | KPI / large values |
+| `text_muted` | `#B8B5AC` | Labels / secondary |
+| `dim` | `#777C78` | Inactive |
+| `accent` / `teal` | `#0F766E` | Primary actions / healthy |
+| `teal_soft` | `#CCFBF1` | Soft process accent |
+| `amber` | `#EAB308` | Warning / drying heat |
+| `orange` | `#D97745` | Discharge / attention |
+| `red` | `#DC2626` | Fault / destructive |
+| `green` | `#22C55E` | Ready / OK |
+| `heater` | `#EAB308` | Heater ON accent |
+| `on_primary` | `#FFFFFF` | Text on saturated buttons |
+| `fault_bg` / `fault_strip` | `#7F1D1D` | Active fault card / strip |
 
 ### Typography and copy
 
 | Role | Font |
 |---|---|
-| Title | Montserrat 24 / 28 |
-| KPI value | Montserrat 28 / 32 |
-| Body | Montserrat 16 / 20 |
+| Title | Montserrat ≈26 |
+| KPI value | Montserrat ≈32 / 40 where flash allows |
+| Body | Montserrat 16 |
 | Caption | Montserrat 14 |
 
 - **Title Case** for on-screen labels and buttons (`Start Batch`, `Acknowledge Fault`)
 - Prefer full words; avoid unexplained abbreviations (`ACK`)
-- State chip uses Title Case (`Idle`, `Drying`, …)
+- State chip uses **ALL CAPS** (`IDLE`, `DRYING`, `FAULT`) to match Figma
 
 ### Spacing and touch
 
-- Card padding: 12–16 px
-- Primary button height: ≥ 64 px
+- Card radius: **8 px**; card padding: 12–16 px
+- Primary button height: **64 px**
 - Click debounce: 450 ms on the same control
-- Content shell is not scroll-draggable; nested scroll only for long lists (e.g. Recent Alarms)
+- Content shell is not scroll-draggable; nested scroll only for long lists
 
 ### State colors
 
-| State | Chip / phase color |
+| State | Chip color |
 |---|---|
 | IDLE | muted |
-| PRECHECK | accent |
+| PRECHECK | teal soft |
 | DRYING | amber |
-| COOLING | accent |
+| COOLING | teal soft |
 | DISCHARGING | orange |
 | COMPLETE | teal |
 | FAULT | red |
@@ -134,12 +140,14 @@ Legacy separate Drying / Cooling / Discharge screens are no longer in the build;
 
 ## 6. Gauges and charts (implemented)
 
-### Gauges (`lv_meter`)
+### Bar gauges (`lv_bar` — replaces circular meters)
 
 | Screen | Gauge | Notes |
 |---|---|---|
-| Home / Run | Moisture % | 0–30 %; live value + **Target** under the value |
-| Home / Run | Chamber °C | 0–80 °C; live value + **Target** (drying or cooling setpoint by phase) |
+| Run | Moisture % | Horizontal bar 0–30 %; value + **Target** + range markers |
+| Run | Chamber °C | Horizontal bar 0–80 °C; target = drying or cooling setpoint |
+
+Home uses metric cards (large value + detail), not bar gauges.
 
 ### Charts (`lv_chart`)
 
@@ -147,9 +155,9 @@ Legacy separate Drying / Cooling / Discharge screens are no longer in the build;
 - No SD CSV replay in v1
 - Series updated each second; widgets are not recreated every tick
 
-### Actuator LEDs
+### Actuator status
 
-Heater, Fan, Elevator, Door — colored when commanded on.
+Heater, Fan, Elevator, Door — LED + status text (`ON` / `OFF` / `RUNNING` / `OPEN` / `CLOSED`).
 
 ---
 
@@ -157,36 +165,39 @@ Heater, Fan, Elevator, Door — colored when commanded on.
 
 ### Home
 
-- Large moisture + chamber gauges with Target lines
-- KPI tiles: Hot Air, Conductivity; actuator LEDs
-- **Start Batch**; **Acknowledge Interrupt** when needed
+- Four metric cards: rice moisture, hot-air temp, chamber temp, chamber humidity
+- EC card + four actuator status cards
+- Status note + **Start Batch** (320×64); **Acknowledge Interrupt** when needed
 
 ### Batch Setup
 
-- Settings summary + Readiness checklist
-- **Start** / **Edit Settings** / **Acknowledge Interrupt**
+- 2-column settings snapshot cards + readiness checklist
+- **Edit Settings** / **Start**; **Acknowledge Interrupt** when needed
 
 ### Run
 
-- Mode title (Drying / Cooling / Discharging)
-- Moisture + chamber gauges with Target under values
-- Dual trend chart
-- Actuator LEDs + **one** timer card (phase elapsed, or Remaining while discharging)
-- **Abort Batch** with confirm dialog
+- Stacked horizontal bar gauges + dual trend chart
+- Horizontal actuator status row
+- Phase timer card + **Abort Batch** with confirm dialog
 
 ### Complete
 
-- Result KPIs + trend snapshot
-- **New Batch**, **History**
+- Four result KPIs + trend snapshot
+- **History** / **New Batch**
 
 ### Alarms
 
-- Active fault card + **Acknowledge Fault**
-- **Recent Alarms** list (scrollable)
+- Split layout: active fault card + **Acknowledge Fault** (left); Recent Alarms list (right)
+- Fault strip under header while a fault is active
 
 ### More → Manual / Settings / History / System / Commission
 
-- Technician pages; commissioning is nested under System → **Commission Sensors**
+- More: 2×2 menu tiles
+- Manual: per-actuator rows with On/Off (or Open/Close)
+- Settings: 3-column editable parameter grid
+- History: scrollable batch rows
+- System: status tiles + **Commission Sensors**
+- Commission: live sensor rows + address assign actions
 
 ---
 
@@ -194,8 +205,9 @@ Heater, Fan, Elevator, Door — colored when commanded on.
 
 - Theme / widgets: `firmware/main/ui/theme/`, `firmware/main/ui/widgets/`
 - Trend RAM buffer: `firmware/main/ui/trend_buffer/`
+- Nav / status icons: `LV_SYMBOL_*` and drawn LED circles (no remote Figma asset URLs in firmware)
 - `CONFIG_SPIRAM_PRE_CONFIGURE_MEMORY_PROTECTION` is **disabled** in `sdkconfig.defaults` to avoid an early boot panic when tiny PSRAM XIP page-alignment gaps are registered with TLSF
-- LVGL chart / meter / Montserrat 14–32 enabled in `sdkconfig.defaults`
+- LVGL chart / bar / Montserrat fonts enabled in `sdkconfig.defaults`
 
 ---
 
@@ -203,12 +215,13 @@ Heater, Fan, Elevator, Door — colored when commanded on.
 
 ```text
 [x] Design guideline checked in
-[x] Home shows moisture and chamber as large gauges (with Target)
-[x] Run shows live dual trend (moisture + chamber)
-[x] Process states have clear presentation (Run variants + Complete)
+[x] Shell matches Figma (88 / 448|400 / 64 + optional fault strip)
+[x] Home / Run / Alarms layouts match Figma screenshots with live data wiring
+[x] Remaining screens (Setup, Complete, More, Manual, Settings, History, System, Commission) updated
 [x] Bottom nav ≤ 4 primary items; Manual/Settings under More
 [x] Primary buttons ≥ 64 px; Abort Batch confirms
 [x] Commands only via Process Controller
-[x] Title Case copy; header phase status + 12-hour date/time
+[x] Title Case buttons; ALL-CAPS state chips; header phase + 12-hour clock
+[x] No temporary Figma asset URLs in firmware
 [ ] Full dry-run glanceability / logging soak on hardware (ongoing bench)
 ```

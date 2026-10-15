@@ -18,6 +18,7 @@ bool ui_theme_is_light_on_color(uint32_t bg_hex)
     case UI_COLOR_BG:
     case UI_COLOR_BORDER:
     case UI_COLOR_FAULT_BG:
+    case UI_COLOR_FAULT_STRIP:
         return false;
     default:
         return true;
@@ -30,7 +31,7 @@ lv_color_t ui_theme_state_color(uint8_t dryer_state)
     case DRYER_STATE_DRYING:
         return ui_theme_color(UI_COLOR_AMBER);
     case DRYER_STATE_COOLING:
-        return ui_theme_color(UI_COLOR_ACCENT);
+        return ui_theme_color(UI_COLOR_TEAL_SOFT);
     case DRYER_STATE_DISCHARGING:
         return ui_theme_color(UI_COLOR_ORANGE);
     case DRYER_STATE_COMPLETE:
@@ -38,10 +39,10 @@ lv_color_t ui_theme_state_color(uint8_t dryer_state)
     case DRYER_STATE_FAULT:
         return ui_theme_color(UI_COLOR_RED);
     case DRYER_STATE_PRECHECK:
-        return ui_theme_color(UI_COLOR_ACCENT);
+        return ui_theme_color(UI_COLOR_TEAL_SOFT);
     case DRYER_STATE_IDLE:
     default:
-        return ui_theme_color(UI_COLOR_MUTED);
+        return ui_theme_color(UI_COLOR_DIM);
     }
 }
 
@@ -57,12 +58,20 @@ const lv_font_t *ui_font_body(void)
 
 const lv_font_t *ui_font_title(void)
 {
+#if LV_FONT_MONTSERRAT_28
+    return &lv_font_montserrat_28;
+#elif LV_FONT_MONTSERRAT_26
+    return &lv_font_montserrat_26;
+#else
     return &lv_font_montserrat_24;
+#endif
 }
 
 const lv_font_t *ui_font_kpi(void)
 {
-#if LV_FONT_MONTSERRAT_28
+#if LV_FONT_MONTSERRAT_32
+    return &lv_font_montserrat_32;
+#elif LV_FONT_MONTSERRAT_28
     return &lv_font_montserrat_28;
 #else
     return &lv_font_montserrat_24;
@@ -85,7 +94,7 @@ lv_obj_t *ui_theme_make_card(lv_obj_t *parent, lv_coord_t w, lv_coord_t h)
     lv_obj_set_style_bg_color(card, ui_theme_color(UI_COLOR_SURFACE), 0);
     lv_obj_set_style_border_color(card, ui_theme_color(UI_COLOR_BORDER), 0);
     lv_obj_set_style_border_width(card, 1, 0);
-    lv_obj_set_style_radius(card, 10, 0);
+    lv_obj_set_style_radius(card, 8, 0);
     lv_obj_set_style_pad_all(card, 12, 0);
     lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
     return card;
@@ -112,7 +121,9 @@ lv_obj_t *ui_theme_make_btn(lv_obj_t *parent, const char *text, lv_event_cb_t cb
     lv_obj_t *btn = lv_btn_create(parent);
     lv_obj_set_size(btn, w, h);
     lv_obj_set_style_bg_color(btn, ui_theme_color(bg_hex), 0);
-    lv_obj_set_style_radius(btn, 10, 0);
+    lv_obj_set_style_radius(btn, 8, 0);
+    lv_obj_set_style_border_color(btn, ui_theme_color(bg_hex), 0);
+    lv_obj_set_style_border_width(btn, 1, 0);
     lv_obj_set_style_shadow_width(btn, 0, 0);
     lv_obj_set_style_pad_hor(btn, 8, 0);
     lv_obj_clear_flag(btn, LV_OBJ_FLAG_SCROLL_CHAIN);
