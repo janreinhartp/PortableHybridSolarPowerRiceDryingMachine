@@ -333,7 +333,7 @@ void ui_manager_show_hmi(const system_status_t *status)
     lv_obj_set_style_radius(s_header, 0, 0);
     lv_obj_clear_flag(s_header, LV_OBJ_FLAG_SCROLLABLE);
 
-    s_brand = ui_theme_make_label(s_header, "SOLAR RICE DRYER\n10 kg / batch · SRD-01",
+    s_brand = ui_theme_make_label(s_header, "SOLAR RICE DRYER\n10 kg / batch - SRD-01",
                                   ui_font_body(), UI_COLOR_TEXT);
     lv_obj_set_width(s_brand, 264);
     lv_obj_set_pos(s_brand, 0, 4);
