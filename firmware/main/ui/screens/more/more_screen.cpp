@@ -14,6 +14,39 @@ static void go(lv_event_t *e)
     ui_manager_navigate((ui_screen_t)id);
 }
 
+static void make_tile(lv_obj_t *parent, lv_coord_t x, lv_coord_t y, const char *title,
+                      const char *subtitle, ui_screen_t screen, const char *symbol)
+{
+    lv_obj_t *card = ui_theme_make_card(parent, 488, 160);
+    lv_obj_set_pos(card, x, y);
+    lv_obj_add_flag(card, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(card, go, LV_EVENT_CLICKED, (void *)(intptr_t)screen);
+
+    lv_obj_t *icon = lv_obj_create(card);
+    lv_obj_set_size(icon, 56, 56);
+    lv_obj_set_style_bg_color(icon, ui_theme_color(UI_COLOR_SURFACE_ALT), 0);
+    lv_obj_set_style_border_width(icon, 0, 0);
+    lv_obj_set_style_radius(icon, 8, 0);
+    lv_obj_clear_flag(icon, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_align(icon, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_t *sym = ui_theme_make_label(icon, symbol, ui_font_title(), UI_COLOR_TEAL);
+    lv_obj_center(sym);
+    lv_obj_clear_flag(sym, LV_OBJ_FLAG_CLICKABLE);
+
+    lv_obj_t *t = ui_theme_make_label(card, title, ui_font_title(), UI_COLOR_TEXT);
+    lv_obj_align(t, LV_ALIGN_TOP_LEFT, 72, 36);
+    lv_obj_clear_flag(t, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_t *s = ui_theme_make_label(card, subtitle, ui_font_body(), UI_COLOR_MUTED);
+    lv_obj_set_width(s, 340);
+    lv_label_set_long_mode(s, LV_LABEL_LONG_DOT);
+    lv_obj_align(s, LV_ALIGN_TOP_LEFT, 72, 76);
+    lv_obj_clear_flag(s, LV_OBJ_FLAG_CLICKABLE);
+
+    lv_obj_t *chev = ui_theme_make_label(card, LV_SYMBOL_RIGHT, ui_font_body(), UI_COLOR_DIM);
+    lv_obj_align(chev, LV_ALIGN_RIGHT_MID, 0, 0);
+    lv_obj_clear_flag(chev, LV_OBJ_FLAG_CLICKABLE);
+}
+
 void more_detach(void)
 {
     s_alive = false;
@@ -22,31 +55,18 @@ void more_detach(void)
 void more_build(lv_obj_t *parent, const system_status_t *status)
 {
     (void)status;
-    lv_obj_t *title =
-        ui_theme_make_label(parent, "More", ui_font_title(), UI_COLOR_TEXT);
-    lv_obj_set_pos(title, 8, 4);
-    lv_obj_t *sub = ui_theme_make_label(parent, "Technician And Maintenance Pages",
-                                        ui_font_body(), UI_COLOR_MUTED);
-    lv_obj_set_pos(sub, 8, 40);
+    lv_obj_t *title = ui_theme_make_label(parent, "More", ui_font_title(), UI_COLOR_TEXT);
+    lv_obj_set_pos(title, 0, 0);
 
-    struct {
-        const char *text;
-        ui_screen_t screen;
-        uint32_t color;
-        lv_coord_t x;
-        lv_coord_t y;
-    } items[] = {
-        {"Settings", UI_SCREEN_SETTINGS, UI_COLOR_ACCENT, 8, 100},
-        {"History", UI_SCREEN_HISTORY, UI_COLOR_TEAL, 260, 100},
-        {"Manual", UI_SCREEN_MANUAL, UI_COLOR_ORANGE, 512, 100},
-        {"System", UI_SCREEN_SYSTEM, UI_COLOR_SURFACE_ALT, 764, 100},
-    };
-    for (size_t i = 0; i < sizeof(items) / sizeof(items[0]); ++i) {
-        lv_obj_t *btn = ui_theme_make_btn(parent, items[i].text, go,
-                                          (void *)(intptr_t)items[i].screen, 230, 120,
-                                          items[i].color);
-        lv_obj_set_pos(btn, items[i].x, items[i].y);
-    }
+    make_tile(parent, 0, 48, "Settings", "Batch parameters and setpoints", UI_SCREEN_SETTINGS,
+              LV_SYMBOL_SETTINGS);
+    make_tile(parent, 504, 48, "History", "Completed batch summaries", UI_SCREEN_HISTORY,
+              LV_SYMBOL_LIST);
+    make_tile(parent, 0, 224, "Manual", "Technician actuator control", UI_SCREEN_MANUAL,
+              LV_SYMBOL_EDIT);
+    make_tile(parent, 504, 224, "System", "Health, network, and commission", UI_SCREEN_SYSTEM,
+              LV_SYMBOL_GPS);
+
     s_alive = true;
 }
 

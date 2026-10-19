@@ -102,9 +102,9 @@ static void render_values(void)
 {
     char storage[F_COUNT][48];
     snprintf(storage[F_MOIST], sizeof(storage[0]), "%.1f %%", s_draft.target_moisture_pct);
-    snprintf(storage[F_DRY], sizeof(storage[0]), "%.0f C", s_draft.drying_temperature_c);
-    snprintf(storage[F_HYST], sizeof(storage[0]), "%.1f C", s_draft.temperature_hysteresis_c);
-    snprintf(storage[F_COOL], sizeof(storage[0]), "%.0f C", s_draft.cooling_temperature_c);
+    snprintf(storage[F_DRY], sizeof(storage[0]), "%.0f °C", s_draft.drying_temperature_c);
+    snprintf(storage[F_HYST], sizeof(storage[0]), "%.1f °C", s_draft.temperature_hysteresis_c);
+    snprintf(storage[F_COOL], sizeof(storage[0]), "%.0f °C", s_draft.cooling_temperature_c);
     snprintf(storage[F_MODE], sizeof(storage[0]), "%s",
              ui_circ_mode_name((uint8_t)s_draft.circulation_mode));
     snprintf(storage[F_INTERVAL], sizeof(storage[0]), "%u s",
@@ -113,7 +113,7 @@ static void render_values(void)
     snprintf(storage[F_DISCHARGE], sizeof(storage[0]), "%u s", (unsigned)s_draft.discharge_time_s);
     snprintf(storage[F_MIN], sizeof(storage[0]), "%u s", (unsigned)s_draft.min_drying_time_s);
     snprintf(storage[F_MAX], sizeof(storage[0]), "%u s", (unsigned)s_draft.max_drying_time_s);
-    snprintf(storage[F_HOT], sizeof(storage[0]), "%.0f C", s_draft.max_hot_air_temperature_c);
+    snprintf(storage[F_HOT], sizeof(storage[0]), "%.0f °C", s_draft.max_hot_air_temperature_c);
     for (int i = 0; i < F_COUNT; ++i) {
         if (s_values[i] != nullptr) {
             lv_label_set_text(s_values[i], storage[i]);
@@ -221,41 +221,49 @@ void settings_build(lv_obj_t *parent, const system_status_t *status)
         "Min Drying",      "Max Drying",      "Max Hot Air",
     };
 
+    lv_obj_t *title = ui_theme_make_label(parent, "Settings", ui_font_title(), UI_COLOR_TEXT);
+    lv_obj_set_pos(title, 0, 0);
+
     lv_obj_t *scroll = lv_obj_create(parent);
-    lv_obj_set_size(scroll, 1000, 320);
-    lv_obj_set_pos(scroll, 0, 0);
+    lv_obj_set_size(scroll, 992, 280);
+    lv_obj_set_pos(scroll, 0, 48);
     lv_obj_set_style_bg_opa(scroll, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(scroll, 0, 0);
     lv_obj_set_style_pad_all(scroll, 0, 0);
+    lv_obj_add_flag(scroll, LV_OBJ_FLAG_SCROLLABLE);
 
+    const lv_coord_t card_w = 320;
+    const lv_coord_t gap = 16;
     for (int i = 0; i < F_COUNT; ++i) {
-        const lv_coord_t y = (lv_coord_t)(i * 48);
-        lv_obj_t *card = ui_theme_make_card(scroll, 980, 44);
-        lv_obj_set_pos(card, 8, y);
-        lv_obj_t *name = ui_theme_make_label(card, names[i], ui_font_body(), UI_COLOR_TEXT);
+        const int row = i / 3;
+        const int col = i % 3;
+        lv_obj_t *card = ui_theme_make_card(scroll, card_w, 64);
+        lv_obj_set_pos(card, (lv_coord_t)(col * (card_w + gap)), (lv_coord_t)(row * 72));
+        lv_obj_t *name = ui_theme_make_label(card, names[i], ui_font_caption(), UI_COLOR_MUTED);
         lv_obj_align(name, LV_ALIGN_LEFT_MID, 0, 0);
-        s_values[i] = ui_theme_make_label(card, "", ui_font_body(), UI_COLOR_ACCENT);
-        lv_obj_align(s_values[i], LV_ALIGN_LEFT_MID, 220, 0);
+
         s_args[i][0].field = i;
         s_args[i][0].sign = -1;
         s_args[i][1].field = i;
         s_args[i][1].sign = 1;
-        const char *minus = (i == F_MODE) ? "Interval" : "-";
-        const char *plus = (i == F_MODE) ? "Continuous" : "+";
-        const lv_coord_t bw = (i == F_MODE) ? 130 : 56;
+
         lv_obj_t *down =
-            ui_theme_make_btn(card, minus, on_adjust, &s_args[i][0], bw, 48, UI_COLOR_SURFACE_ALT);
-        lv_obj_align(down, LV_ALIGN_RIGHT_MID, (lv_coord_t)(-(bw + 16)), 0);
+            ui_theme_make_btn(card, "-", on_adjust, &s_args[i][0], 40, 40, UI_COLOR_SURFACE_ALT);
+        lv_obj_align(down, LV_ALIGN_RIGHT_MID, -112, 0);
+        s_values[i] = ui_theme_make_label(card, "", ui_font_body(), UI_COLOR_CREAM);
+        lv_obj_set_width(s_values[i], 64);
+        lv_label_set_long_mode(s_values[i], LV_LABEL_LONG_CLIP);
+        lv_obj_align(s_values[i], LV_ALIGN_RIGHT_MID, -48, 0);
         lv_obj_t *up =
-            ui_theme_make_btn(card, plus, on_adjust, &s_args[i][1], bw, 48, UI_COLOR_SURFACE_ALT);
+            ui_theme_make_btn(card, "+", on_adjust, &s_args[i][1], 40, 40, UI_COLOR_SURFACE_ALT);
         lv_obj_align(up, LV_ALIGN_RIGHT_MID, 0, 0);
     }
 
-    s_save = ui_theme_make_btn(parent, "Save", on_save, nullptr, 180, 64, UI_COLOR_TEAL);
-    lv_obj_set_pos(s_save, 8, 340);
     lv_obj_t *defaults =
-        ui_theme_make_btn(parent, "Restore Defaults", on_defaults, nullptr, 220, 64, UI_COLOR_ACCENT);
-    lv_obj_set_pos(defaults, 204, 340);
+        ui_theme_make_btn(parent, "Defaults", on_defaults, nullptr, 488, 64, UI_COLOR_SURFACE_ALT);
+    lv_obj_set_pos(defaults, 0, 344);
+    s_save = ui_theme_make_btn(parent, "Save", on_save, nullptr, 488, 64, UI_COLOR_TEAL);
+    lv_obj_set_pos(s_save, 504, 344);
 
     s_alive = true;
     render_values();

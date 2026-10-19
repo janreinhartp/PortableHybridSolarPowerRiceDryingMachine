@@ -6,8 +6,8 @@
 
 static const char *TAG = "settings_mgr";
 static const char *NVS_NS = "dryer_set";
-/* Bump key when temporary bench timings change so old NVS values are not reused. */
-static const char *NVS_KEY = "cfg_bench";
+/* Bump key when defaults change so old NVS blobs are not reused. */
+static const char *NVS_KEY = "cfg_v2";
 
 static dryer_settings_t s_settings {};
 
@@ -22,9 +22,9 @@ void settings_manager_get_defaults(dryer_settings_t *out)
     out->temperature_hysteresis_c = 2.0f;
     out->cooling_temperature_c = 35.0f;
     out->circulation_mode = CIRCULATION_MODE_INTERVAL;
-    /* Temporary bench timing: 10 s period, elevator ON 3 s (was 120 / 10). */
-    out->circulation_interval_s = 10;
-    out->circulation_run_time_s = 3;
+    /* Production defaults (MASTERPLAN): interval 2 min, run 10 s. */
+    out->circulation_interval_s = 120;
+    out->circulation_run_time_s = 10;
     out->discharge_time_s = 60;
     out->min_drying_time_s = 300;
     out->max_drying_time_s = 28800;

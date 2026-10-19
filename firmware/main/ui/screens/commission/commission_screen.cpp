@@ -8,6 +8,7 @@
 #include "ui_manager.h"
 
 static bool s_alive = false;
+static lv_obj_t *s_rows[4] = {};
 static lv_obj_t *s_note = nullptr;
 
 static void on_hotair(lv_event_t *e)
@@ -43,43 +44,87 @@ static void on_back(lv_event_t *e)
     }
 }
 
+static lv_obj_t *make_sensor_row(lv_obj_t *parent, lv_coord_t y, const char *name)
+{
+    lv_obj_t *row = ui_theme_make_card(parent, 992, 64);
+    lv_obj_set_pos(row, 0, y);
+    lv_obj_t *lbl = ui_theme_make_label(row, name, ui_font_body(), UI_COLOR_TEXT);
+    lv_obj_align(lbl, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_t *st = ui_theme_make_label(row, "--", ui_font_body(), UI_COLOR_DIM);
+    lv_obj_align(st, LV_ALIGN_RIGHT_MID, 0, 0);
+    lv_obj_set_user_data(row, st);
+    return row;
+}
+
+static void set_row(lv_obj_t *row, bool ok, const char *detail)
+{
+    if (row == nullptr) {
+        return;
+    }
+    lv_obj_t *st = (lv_obj_t *)lv_obj_get_user_data(row);
+    if (st == nullptr) {
+        return;
+    }
+    char buf[80];
+    snprintf(buf, sizeof(buf), "%s  %s", ok ? "CONNECTED" : "OFFLINE",
+             detail != nullptr ? detail : "");
+    lv_label_set_text(st, buf);
+    lv_obj_set_style_text_color(st, ui_theme_color(ok ? UI_COLOR_TEAL : UI_COLOR_RED), 0);
+}
+
 void commission_detach(void)
 {
     s_alive = false;
     s_note = nullptr;
+    for (int i = 0; i < 4; ++i) {
+        s_rows[i] = nullptr;
+    }
 }
 
 void commission_build(lv_obj_t *parent, const system_status_t *status)
 {
-    (void)status;
     lv_obj_t *title =
         ui_theme_make_label(parent, "Commission Sensors", ui_font_title(), UI_COLOR_ORANGE);
-    lv_obj_set_pos(title, 8, 4);
-    lv_obj_t *help = ui_theme_make_label(
-        parent,
-        "Wire One XY-MD03 Probe. Assign Hot Air = Address 1 Or Chamber = Address 2, Then Power-Cycle.",
-        ui_font_body(), UI_COLOR_MUTED);
-    lv_obj_set_width(help, 980);
-    lv_obj_set_pos(help, 8, 44);
+    lv_obj_set_pos(title, 0, 0);
 
-    lv_obj_t *hot = ui_theme_make_btn(parent, "Assign Hot Air (1)", on_hotair, nullptr, 260, 72,
+    s_rows[0] = make_sensor_row(parent, 48, "Hot Air Temperature Probe");
+    s_rows[1] = make_sensor_row(parent, 120, "Chamber Temperature / Humidity");
+    s_rows[2] = make_sensor_row(parent, 192, "Rice Moisture");
+    s_rows[3] = make_sensor_row(parent, 264, "Conductivity (EC)");
+
+    lv_obj_t *hot = ui_theme_make_btn(parent, "Assign Hot Air (1)", on_hotair, nullptr, 320, 48,
                                       UI_COLOR_ACCENT);
-    lv_obj_set_pos(hot, 8, 120);
-    lv_obj_t *ch = ui_theme_make_btn(parent, "Assign Chamber (2)", on_chamber, nullptr, 260, 72,
+    lv_obj_set_pos(hot, 0, 336);
+    lv_obj_t *ch = ui_theme_make_btn(parent, "Assign Chamber (2)", on_chamber, nullptr, 320, 48,
                                      UI_COLOR_TEAL);
-    lv_obj_set_pos(ch, 284, 120);
+    lv_obj_set_pos(ch, 336, 336);
     lv_obj_t *back =
-        ui_theme_make_btn(parent, "Back", on_back, nullptr, 160, 64, UI_COLOR_SURFACE_ALT);
-    lv_obj_set_pos(back, 8, 340);
+        ui_theme_make_btn(parent, "Back", on_back, nullptr, 320, 48, UI_COLOR_SURFACE_ALT);
+    lv_obj_set_pos(back, 672, 336);
 
-    s_note = ui_theme_make_label(parent, "", ui_font_body(), UI_COLOR_AMBER);
-    lv_obj_set_width(s_note, 980);
-    lv_obj_set_pos(s_note, 8, 220);
+    s_note = ui_theme_make_label(
+        parent, "Wire One XY-MD03 Probe, Assign Address, Then Power-Cycle.", ui_font_caption(),
+        UI_COLOR_MUTED);
+    lv_obj_set_width(s_note, 992);
+    lv_obj_set_pos(s_note, 0, 392);
+
     s_alive = true;
+    commission_update(status);
 }
 
 void commission_update(const system_status_t *status)
 {
-    (void)status;
-    (void)s_alive;
+    if (!s_alive || status == nullptr) {
+        return;
+    }
+    char detail[48];
+    snprintf(detail, sizeof(detail), "%.1f °C", status->hotair_temp_c);
+    set_row(s_rows[0], status->hotair_ok, status->hotair_ok ? detail : "");
+    snprintf(detail, sizeof(detail), "%.1f °C / %.0f %%", status->chamber_temp_c,
+             status->chamber_rh);
+    set_row(s_rows[1], status->chamber_ok, status->chamber_ok ? detail : "");
+    snprintf(detail, sizeof(detail), "%.1f %%", status->moisture_pct);
+    set_row(s_rows[2], status->moisture_ok, status->moisture_ok ? detail : "");
+    snprintf(detail, sizeof(detail), "%.2f", status->ec_value);
+    set_row(s_rows[3], status->ec_ok, status->ec_ok ? detail : "");
 }

@@ -9,22 +9,26 @@ extern "C" {
 #endif
 
 enum {
-    /* Light industrial SCADA — high contrast on a 7" outdoor-adjacent panel */
-    UI_COLOR_BG = 0xF1F5F9,
-    UI_COLOR_SURFACE = 0xFFFFFF,
-    UI_COLOR_SURFACE_ALT = 0xE2E8F0,
-    UI_COLOR_BORDER = 0xCBD5E1,
-    UI_COLOR_TEXT = 0x0F172A,
-    UI_COLOR_MUTED = 0x475569,
-    UI_COLOR_ACCENT = 0x0369A1,
+    /* Warm charcoal SCADA palette from Rice Dryer Design Figma. */
+    UI_COLOR_BG = 0x171A19,
+    UI_COLOR_SURFACE = 0x222625,
+    UI_COLOR_SURFACE_ALT = 0x2B302E,
+    UI_COLOR_BORDER = 0x3A403D,
+    UI_COLOR_TEXT = 0xF5F1E8,
+    UI_COLOR_CREAM = 0xF2E8CF,
+    UI_COLOR_MUTED = 0xB8B5AC,
+    UI_COLOR_DIM = 0x777C78,
+    UI_COLOR_ACCENT = 0x0F766E,
     UI_COLOR_TEAL = 0x0F766E,
-    UI_COLOR_AMBER = 0xB45309,
-    UI_COLOR_ORANGE = 0xC2410C,
-    UI_COLOR_RED = 0xB91C1C,
-    UI_COLOR_GREEN = 0x15803D,
-    UI_COLOR_HEATER = 0xEA580C,
+    UI_COLOR_TEAL_SOFT = 0xCCFBF1,
+    UI_COLOR_AMBER = 0xEAB308,
+    UI_COLOR_ORANGE = 0xD97745,
+    UI_COLOR_RED = 0xDC2626,
+    UI_COLOR_GREEN = 0x22C55E,
+    UI_COLOR_HEATER = 0xEAB308,
     UI_COLOR_ON_PRIMARY = 0xFFFFFF,
-    UI_COLOR_FAULT_BG = 0xFEE2E2,
+    UI_COLOR_FAULT_BG = 0x7F1D1D,
+    UI_COLOR_FAULT_STRIP = 0x991B1B,
 };
 
 /** Ignore repeat taps on the same control within this window (ms). */

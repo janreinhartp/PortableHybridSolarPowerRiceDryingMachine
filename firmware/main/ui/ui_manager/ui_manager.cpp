@@ -21,13 +21,19 @@
 #include "ui_theme.h"
 #include "ui_widgets.h"
 
+static lv_obj_t *s_header = nullptr;
+static lv_obj_t *s_brand = nullptr;
 static lv_obj_t *s_chip = nullptr;
 static lv_obj_t *s_batch = nullptr;
 static lv_obj_t *s_phase = nullptr;
-static lv_obj_t *s_clock = nullptr;
-static lv_obj_t *s_fault = nullptr;
+static lv_obj_t *s_clock_date = nullptr;
+static lv_obj_t *s_clock_time = nullptr;
+static lv_obj_t *s_fault_strip = nullptr;
+static lv_obj_t *s_fault_text = nullptr;
 static lv_obj_t *s_content = nullptr;
+static lv_obj_t *s_nav_bar = nullptr;
 static lv_obj_t *s_nav[4] = {};
+static lv_obj_t *s_nav_lbl[4] = {};
 static ui_screen_t s_screen = UI_SCREEN_DASHBOARD;
 static uint8_t s_seen_state = 0xFF;
 static system_status_t s_status {};
@@ -46,18 +52,15 @@ static const char *phase_text_for(const system_status_t *status)
     case DRYER_STATE_PRECHECK:
         return "Running Precheck";
     case DRYER_STATE_DRYING:
-        return "Drying";
+        return "Running Drying";
     case DRYER_STATE_COOLING:
-        return "Cooling";
+        return "Running Cooling";
     case DRYER_STATE_DISCHARGING:
         return "Discharging";
     case DRYER_STATE_COMPLETE:
         return "Batch Complete";
     case DRYER_STATE_FAULT:
-        if (status->active_fault != 0) {
-            return safety_manager_fault_name((fault_code_t)status->active_fault);
-        }
-        return "Fault Active";
+        return "Fault";
     case DRYER_STATE_IDLE:
     default:
         if (status->batch_interrupted) {
@@ -82,7 +85,27 @@ static void refresh_header_phase(const system_status_t *status)
         s_ephemeral[0] = '\0';
     }
     lv_label_set_text(s_phase, phase_text_for(status));
-    lv_obj_set_style_text_color(s_phase, ui_theme_state_color(status->dryer_state), 0);
+    lv_obj_set_style_text_color(s_phase, ui_theme_color(UI_COLOR_MUTED), 0);
+}
+
+static void layout_content(bool fault_visible)
+{
+    if (s_content == nullptr) {
+        return;
+    }
+    if (fault_visible) {
+        if (s_fault_strip != nullptr) {
+            lv_obj_clear_flag(s_fault_strip, LV_OBJ_FLAG_HIDDEN);
+        }
+        lv_obj_set_pos(s_content, 0, 136);
+        lv_obj_set_size(s_content, 1024, 400);
+    } else {
+        if (s_fault_strip != nullptr) {
+            lv_obj_add_flag(s_fault_strip, LV_OBJ_FLAG_HIDDEN);
+        }
+        lv_obj_set_pos(s_content, 0, 88);
+        lv_obj_set_size(s_content, 1024, 448);
+    }
 }
 
 static ui_screen_t screen_for_state(uint8_t state)
@@ -154,7 +177,11 @@ static void highlight_nav(void)
             on = (s_screen == mapped[i]);
         }
         lv_obj_set_style_bg_color(s_nav[i],
-                                  ui_theme_color(on ? UI_COLOR_TEAL : UI_COLOR_SURFACE_ALT), 0);
+                                  ui_theme_color(on ? UI_COLOR_TEAL : UI_COLOR_SURFACE), 0);
+        if (s_nav_lbl[i] != nullptr) {
+            lv_obj_set_style_text_color(
+                s_nav_lbl[i], ui_theme_color(on ? UI_COLOR_ON_PRIMARY : UI_COLOR_DIM), 0);
+        }
     }
 }
 
@@ -294,51 +321,117 @@ void ui_manager_show_hmi(const system_status_t *status)
     lv_obj_clean(scr);
     ui_theme_apply_screen(scr);
 
-    s_chip = ui_state_chip_create(scr);
-    lv_obj_set_pos(s_chip, 12, 10);
+    s_header = lv_obj_create(scr);
+    lv_obj_set_size(s_header, 1024, 88);
+    lv_obj_set_pos(s_header, 0, 0);
+    lv_obj_set_style_bg_color(s_header, ui_theme_color(UI_COLOR_SURFACE), 0);
+    lv_obj_set_style_border_color(s_header, ui_theme_color(UI_COLOR_BORDER), 0);
+    lv_obj_set_style_border_width(s_header, 0, 0);
+    lv_obj_set_style_border_side(s_header, LV_BORDER_SIDE_BOTTOM, 0);
+    lv_obj_set_style_border_width(s_header, 1, 0);
+    lv_obj_set_style_pad_all(s_header, 16, 0);
+    lv_obj_set_style_radius(s_header, 0, 0);
+    lv_obj_clear_flag(s_header, LV_OBJ_FLAG_SCROLLABLE);
+
+    s_brand = ui_theme_make_label(s_header, "SOLAR RICE DRYER\n10 kg / batch - SRD-01",
+                                  ui_font_body(), UI_COLOR_TEXT);
+    lv_obj_set_width(s_brand, 264);
+    lv_obj_set_pos(s_brand, 0, 4);
+    lv_obj_set_style_text_font(s_brand, ui_font_body(), 0);
+
+    s_chip = ui_state_chip_create(s_header);
+    lv_obj_set_pos(s_chip, 280, 8);
     ui_state_chip_set(s_chip, s_status.dryer_state);
 
-    s_batch = ui_theme_make_label(scr, "Batch -", ui_font_body(), UI_COLOR_MUTED);
-    lv_obj_set_pos(s_batch, 170, 16);
+    s_batch = ui_theme_make_label(s_header, "BATCH-", ui_font_body(), UI_COLOR_CREAM);
+    lv_obj_set_width(s_batch, 220);
+    lv_label_set_long_mode(s_batch, LV_LABEL_LONG_DOT);
+    lv_obj_set_pos(s_batch, 456, 4);
 
-    s_phase = ui_theme_make_label(scr, phase_text_for(&s_status), ui_font_body(), UI_COLOR_MUTED);
-    lv_obj_set_width(s_phase, 300);
+    s_phase = ui_theme_make_label(s_header, phase_text_for(&s_status), ui_font_body(),
+                                  UI_COLOR_MUTED);
+    lv_obj_set_width(s_phase, 220);
     lv_label_set_long_mode(s_phase, LV_LABEL_LONG_DOT);
-    lv_obj_set_pos(s_phase, 380, 16);
+    lv_obj_set_pos(s_phase, 456, 32);
     refresh_header_phase(&s_status);
 
-    s_clock = ui_theme_make_label(scr, "", ui_font_body(), UI_COLOR_MUTED);
-    lv_obj_align(s_clock, LV_ALIGN_TOP_RIGHT, -16, 16);
+    s_clock_date = ui_theme_make_label(s_header, "", ui_font_body(), UI_COLOR_TEXT);
+    lv_obj_set_style_text_align(s_clock_date, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_align(s_clock_date, LV_ALIGN_TOP_RIGHT, 0, 4);
 
-    s_fault = ui_theme_make_label(scr, "", ui_font_body(), UI_COLOR_RED);
-    lv_obj_set_width(s_fault, 700);
-    lv_obj_set_pos(s_fault, 170, 48);
+    s_clock_time = ui_theme_make_label(s_header, "", ui_font_title(), UI_COLOR_TEXT);
+    lv_obj_set_style_text_align(s_clock_time, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_align(s_clock_time, LV_ALIGN_TOP_RIGHT, 0, 28);
+
+    s_fault_strip = lv_obj_create(scr);
+    lv_obj_set_size(s_fault_strip, 1024, 48);
+    lv_obj_set_pos(s_fault_strip, 0, 88);
+    lv_obj_set_style_bg_color(s_fault_strip, ui_theme_color(UI_COLOR_FAULT_STRIP), 0);
+    lv_obj_set_style_border_width(s_fault_strip, 0, 0);
+    lv_obj_set_style_radius(s_fault_strip, 0, 0);
+    lv_obj_set_style_pad_hor(s_fault_strip, 16, 0);
+    lv_obj_clear_flag(s_fault_strip, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t *fault_tag =
+        ui_theme_make_label(s_fault_strip, "FAULT", ui_font_body(), UI_COLOR_ON_PRIMARY);
+    lv_obj_align(fault_tag, LV_ALIGN_LEFT_MID, 0, 0);
+    s_fault_text =
+        ui_theme_make_label(s_fault_strip, "", ui_font_body(), UI_COLOR_ON_PRIMARY);
+    lv_obj_set_width(s_fault_text, 800);
+    lv_label_set_long_mode(s_fault_text, LV_LABEL_LONG_DOT);
+    lv_obj_align(s_fault_text, LV_ALIGN_LEFT_MID, 80, 0);
+    lv_obj_add_flag(s_fault_strip, LV_OBJ_FLAG_HIDDEN);
 
     s_content = lv_obj_create(scr);
-    lv_obj_set_size(s_content, 1000, 448);
-    lv_obj_set_pos(s_content, 12, 80);
     lv_obj_set_style_bg_color(s_content, ui_theme_color(UI_COLOR_BG), 0);
     lv_obj_set_style_border_width(s_content, 0, 0);
-    lv_obj_set_style_pad_all(s_content, 4, 0);
-    /* Avoid scroll-drag eating taps / producing double activations. */
+    lv_obj_set_style_pad_all(s_content, 16, 0);
+    lv_obj_set_style_radius(s_content, 0, 0);
     lv_obj_clear_flag(s_content, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_scrollbar_mode(s_content, LV_SCROLLBAR_MODE_OFF);
+    layout_content(s_status.active_fault != 0);
+
+    s_nav_bar = lv_obj_create(scr);
+    lv_obj_set_size(s_nav_bar, 1024, 64);
+    lv_obj_set_pos(s_nav_bar, 0, 536);
+    lv_obj_set_style_bg_color(s_nav_bar, ui_theme_color(UI_COLOR_SURFACE), 0);
+    lv_obj_set_style_border_color(s_nav_bar, ui_theme_color(UI_COLOR_BORDER), 0);
+    lv_obj_set_style_border_side(s_nav_bar, LV_BORDER_SIDE_TOP, 0);
+    lv_obj_set_style_border_width(s_nav_bar, 1, 0);
+    lv_obj_set_style_radius(s_nav_bar, 0, 0);
+    lv_obj_set_style_pad_all(s_nav_bar, 8, 0);
+    lv_obj_clear_flag(s_nav_bar, LV_OBJ_FLAG_SCROLLABLE);
 
     struct {
+        const char *symbol;
         const char *text;
         ui_screen_t id;
     } nav[] = {
-        {"Home", UI_SCREEN_DASHBOARD},
-        {"Run", UI_SCREEN_RUN},
-        {"Alarms", UI_SCREEN_ALARMS},
-        {"More", UI_SCREEN_MORE},
+        {LV_SYMBOL_HOME, "Home", UI_SCREEN_DASHBOARD},
+        {LV_SYMBOL_PLAY, "Run", UI_SCREEN_RUN},
+        {LV_SYMBOL_WARNING, "Alarms", UI_SCREEN_ALARMS},
+        {LV_SYMBOL_LIST, "More", UI_SCREEN_MORE},
     };
+    const lv_coord_t nav_w = 240;
     for (size_t i = 0; i < 4; ++i) {
-        s_nav[i] = ui_theme_make_btn(scr, nav[i].text, on_nav, (void *)(intptr_t)nav[i].id, 240,
-                                     56, UI_COLOR_SURFACE_ALT);
-        lv_obj_set_pos(s_nav[i], (lv_coord_t)(12 + (int)i * 252), 536);
+        s_nav[i] = lv_btn_create(s_nav_bar);
+        lv_obj_set_size(s_nav[i], nav_w, 48);
+        lv_obj_set_pos(s_nav[i], (lv_coord_t)((int)i * (nav_w + 8)), 0);
+        lv_obj_set_style_radius(s_nav[i], 8, 0);
+        lv_obj_set_style_shadow_width(s_nav[i], 0, 0);
+        lv_obj_set_style_bg_color(s_nav[i], ui_theme_color(UI_COLOR_SURFACE), 0);
+        lv_obj_add_event_cb(s_nav[i], on_nav, LV_EVENT_CLICKED, (void *)(intptr_t)nav[i].id);
+
+        char label[48];
+        snprintf(label, sizeof(label), "%s %s", nav[i].symbol, nav[i].text);
+        s_nav_lbl[i] = ui_theme_make_label(s_nav[i], label, ui_font_body(), UI_COLOR_DIM);
+        lv_obj_center(s_nav_lbl[i]);
     }
 
+    if (s_status.active_fault != 0) {
+        lv_label_set_text(s_fault_text,
+                          safety_manager_fault_name((fault_code_t)s_status.active_fault));
+    }
+    layout_content(s_status.active_fault != 0);
     ui_manager_navigate(screen_for_state(s_status.dryer_state));
 }
 
@@ -356,24 +449,34 @@ void ui_manager_update_runtime(const system_status_t *status, unsigned touch_tap
     }
     if (s_batch != nullptr) {
         char buf[48];
-        snprintf(buf, sizeof(buf), "Batch %s", status->batch_id[0] ? status->batch_id : "-");
+        snprintf(buf, sizeof(buf), "%s", status->batch_id[0] ? status->batch_id : "BATCH-");
         lv_label_set_text(s_batch, buf);
     }
     refresh_header_phase(status);
-    if (s_clock != nullptr && status->rtc_ok) {
-        char buf[40];
-        ui_format_header_datetime(buf, sizeof(buf), status->rtc_year, status->rtc_month,
-                                  status->rtc_day, status->rtc_hour, status->rtc_minute);
-        lv_label_set_text(s_clock, buf);
-    }
-    if (s_fault != nullptr) {
-        if (status->active_fault == 0) {
-            lv_label_set_text(s_fault, "");
-        } else {
-            lv_label_set_text(s_fault,
-                              safety_manager_fault_name((fault_code_t)status->active_fault));
+    if (status->rtc_ok) {
+        char date[24];
+        char time[16];
+        ui_format_header_date(date, sizeof(date), status->rtc_year, status->rtc_month,
+                              status->rtc_day);
+        ui_format_header_time(time, sizeof(time), status->rtc_hour, status->rtc_minute);
+        if (s_clock_date != nullptr) {
+            lv_label_set_text(s_clock_date, date);
+        }
+        if (s_clock_time != nullptr) {
+            lv_label_set_text(s_clock_time, time);
         }
     }
+
+    const bool fault_on = status->active_fault != 0;
+    if (s_fault_text != nullptr) {
+        if (fault_on) {
+            lv_label_set_text(s_fault_text,
+                              safety_manager_fault_name((fault_code_t)status->active_fault));
+        } else {
+            lv_label_set_text(s_fault_text, "");
+        }
+    }
+    layout_content(fault_on);
 
     if (status->dryer_state != s_seen_state) {
         s_seen_state = status->dryer_state;
