@@ -74,7 +74,7 @@ void complete_update(const system_status_t *status)
     char buf[64];
     snprintf(buf, sizeof(buf), "%s", status->batch_id[0] ? status->batch_id : "-");
     ui_kpi_set(&s_batch, buf);
-    snprintf(buf, sizeof(buf), "%.1f → %.1f %%", status->initial_moisture_pct,
+    snprintf(buf, sizeof(buf), "%.1f -> %.1f %%", status->initial_moisture_pct,
              status->final_moisture_pct);
     ui_kpi_set(&s_moist, buf);
     snprintf(buf, sizeof(buf), "%.1f °C", status->max_chamber_temp_c);

@@ -93,12 +93,12 @@ void system_info_update(const system_status_t *status, unsigned touch_taps)
     char d[96];
 
     snprintf(v, sizeof(v), "%s", status->display_ok && status->touch_ok ? "Ok" : "Fail");
-    snprintf(d, sizeof(d), "Touch %s · LVGL %s · Taps %u", status->touch_ok ? "Ok" : "Fail",
+    snprintf(d, sizeof(d), "Touch %s / LVGL %s / Taps %u", status->touch_ok ? "Ok" : "Fail",
              status->lvgl_ok ? "Ok" : "Fail", touch_taps);
     set_tile(s_tiles[0], v, d);
 
     snprintf(v, sizeof(v), "%s", status->sd_ok ? "Ok" : "Fail");
-    snprintf(d, sizeof(d), "%u / %u MB · Logger %s", (unsigned)status->sd_free_mb,
+    snprintf(d, sizeof(d), "%u / %u MB / Logger %s", (unsigned)status->sd_free_mb,
              (unsigned)status->sd_total_mb, status->logger_ok ? "Ok" : "Fail");
     set_tile(s_tiles[1], v, d);
 
@@ -109,8 +109,8 @@ void system_info_update(const system_status_t *status, unsigned touch_taps)
     set_tile(s_tiles[2], v, d);
 
     snprintf(v, sizeof(v), "%s", status->wifi_ok ? "Online" : "Offline");
-    snprintf(d, sizeof(d), "%s · http://192.168.4.1",
-             status->wifi_ssid[0] ? status->wifi_ssid : "—");
+    snprintf(d, sizeof(d), "%s / http://192.168.4.1",
+             status->wifi_ssid[0] ? status->wifi_ssid : "-");
     set_tile(s_tiles[3], v, d);
 
     snprintf(v, sizeof(v), "%u", (unsigned)status->free_heap);
@@ -119,7 +119,7 @@ void system_info_update(const system_status_t *status, unsigned touch_taps)
 
     snprintf(v, sizeof(v), "%s",
              (status->hotair_ok && status->chamber_ok && status->moisture_ok) ? "Ok" : "Check");
-    snprintf(d, sizeof(d), "Hot %s · Ch %s · Moist %s · EC %s",
+    snprintf(d, sizeof(d), "Hot %s / Ch %s / Moist %s / EC %s",
              status->hotair_ok ? "Ok" : "X", status->chamber_ok ? "Ok" : "X",
              status->moisture_ok ? "Ok" : "X", status->ec_ok ? "Ok" : "X");
     set_tile(s_tiles[5], v, d);

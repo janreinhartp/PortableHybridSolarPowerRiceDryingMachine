@@ -145,6 +145,13 @@ static esp_err_t handle_root(httpd_req_t *req)
     return httpd_resp_send(req, DASHBOARD_HTML, HTTPD_RESP_USE_STRLEN);
 }
 
+static esp_err_t handle_favicon(httpd_req_t *req)
+{
+    httpd_resp_set_status(req, "204 No Content");
+    httpd_resp_set_type(req, "image/x-icon");
+    return httpd_resp_send(req, nullptr, 0);
+}
+
 static esp_err_t handle_api_status(httpd_req_t *req)
 {
     const system_status_t *st = status_snap();
@@ -482,6 +489,10 @@ static esp_err_t start_httpd(void)
 
     const httpd_uri_t routes[] = {
         {.uri = "/", .method = HTTP_GET, .handler = handle_root, .user_ctx = nullptr},
+        {.uri = "/favicon.ico",
+         .method = HTTP_GET,
+         .handler = handle_favicon,
+         .user_ctx = nullptr},
         {.uri = "/api/status",
          .method = HTTP_GET,
          .handler = handle_api_status,

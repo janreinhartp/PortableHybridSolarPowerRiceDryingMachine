@@ -285,7 +285,8 @@ static void enter_fault(fault_code_t code, const sensor_data_t *sensors,
 /**
  * F007 / F008 without position feedback: command-duration watchdogs.
  * Continuous drying circulation may keep the elevator ON indefinitely (locked).
- * Door OPEN/CLOSE longer than k_door_max_travel_s raises F008.
+ * F008 only during DISCHARGING travel (OPEN settle / CLOSE) — not while DRYING
+ * holds the door closed for the whole batch.
  * Elevator ON longer than max(run, discharge) + grace raises F007.
  */
 static bool check_actuator_timeouts(const sensor_data_t *sensors,
@@ -303,8 +304,14 @@ static bool check_actuator_timeouts(const sensor_data_t *sensors,
     actuator_manager_get_state(&coils);
     const int64_t now = esp_timer_get_time();
 
-    const bool door_moving = coils.door_open || coils.door_close;
-    if (door_moving) {
+    /* Door travel watchdog only while discharging (open/close moves). */
+    const bool door_travel =
+        s_state == DRYER_STATE_DISCHARGING &&
+        (s_discharge_step == DISCHARGE_SETTLE ||
+         s_discharge_step == DISCHARGE_CLOSE_DOOR ||
+         s_discharge_step == DISCHARGE_OPEN_DOOR) &&
+        (coils.door_open || coils.door_close);
+    if (door_travel) {
         if (s_door_cmd_us == 0) {
             s_door_cmd_us = now;
         } else if (elapsed_s(s_door_cmd_us) >= k_door_max_travel_s) {
@@ -791,7 +798,8 @@ void process_controller_tick(const sensor_data_t *sensors,
         note_temp(sensors);
 
         actuator_manager_set_fan(true);
-        actuator_manager_close_door();
+        /* Door already closed at PRECHECK — do not hold CLOSE coil for the batch. */
+        actuator_manager_stop_door();
         apply_heater_hysteresis(sensors, settings);
         save_recovery_throttled(sensors, false);
 
@@ -814,7 +822,7 @@ void process_controller_tick(const sensor_data_t *sensors,
             }
             actuator_manager_set_elevator(false);
             actuator_manager_set_fan(true);
-            actuator_manager_close_door();
+            actuator_manager_stop_door();
 
             s_cooling_start_us = esp_timer_get_time();
             s_cooling_elapsed_s = 0;
@@ -837,7 +845,7 @@ void process_controller_tick(const sensor_data_t *sensors,
         }
         actuator_manager_set_elevator(false);
         actuator_manager_set_fan(true);
-        actuator_manager_close_door();
+        actuator_manager_stop_door();
         save_recovery_throttled(sensors, false);
 
         if (sensors->chamber_temp_valid &&

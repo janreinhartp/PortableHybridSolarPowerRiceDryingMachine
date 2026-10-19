@@ -107,7 +107,7 @@ void history_update(const system_status_t *status)
         ui_format_hms(dry, sizeof(dry), rows[i].drying_s);
         char line[220];
         snprintf(line, sizeof(line),
-                 "%.15s     %.23s     %.1f → %.1f %%     %.15s  Dry %s",
+                 "%.15s     %.23s     %.1f -> %.1f %%     %.15s  Dry %s",
                  rows[i].batch_id, rows[i].end_time, rows[i].initial_moisture,
                  rows[i].final_moisture, rows[i].completion, dry);
         lv_label_set_text(lbl, line);

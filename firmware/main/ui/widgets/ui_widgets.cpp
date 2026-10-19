@@ -204,7 +204,7 @@ ui_trend_t ui_trend_create(lv_obj_t *parent, lv_coord_t w, lv_coord_t h)
     lv_obj_set_style_pad_all(t.root, 16, 0);
 
     lv_obj_t *title =
-        ui_theme_make_label(t.root, "Live Trend · Last 5 Minutes", ui_font_body(), UI_COLOR_TEXT);
+        ui_theme_make_label(t.root, "Live Trend - Last 5 Minutes", ui_font_body(), UI_COLOR_TEXT);
     lv_obj_align(title, LV_ALIGN_TOP_LEFT, 0, 0);
     lv_obj_t *legend = ui_theme_make_label(t.root, "Moisture  /  Chamber", ui_font_caption(),
                                            UI_COLOR_MUTED);
@@ -317,10 +317,11 @@ void ui_leds_set(ui_actuator_leds_t *leds, const system_status_t *status)
                                 UI_COLOR_DIM};
     for (int i = 0; i < 4; ++i) {
         const bool active = (i == 3) ? status->relay_door_open : on[i];
-        const uint32_t c = active ? colors[i] : UI_COLOR_DIM;
+        const uint32_t c = active ? colors[i] : (uint32_t)UI_COLOR_DIM;
         if (leds->leds[i] != nullptr) {
-            lv_obj_set_style_bg_color(leds->leds[i],
-                                      ui_theme_color(active ? colors[i] : UI_COLOR_BORDER), 0);
+            lv_obj_set_style_bg_color(
+                leds->leds[i],
+                ui_theme_color(active ? colors[i] : (uint32_t)UI_COLOR_BORDER), 0);
         }
         if (leds->status[i] != nullptr) {
             lv_label_set_text(leds->status[i], text[i]);

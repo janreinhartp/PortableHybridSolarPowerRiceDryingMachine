@@ -28,7 +28,7 @@ enum {
     UI_COLOR_HEATER = 0xEAB308,
     UI_COLOR_ON_PRIMARY = 0xFFFFFF,
     UI_COLOR_FAULT_BG = 0x7F1D1D,
-    UI_COLOR_FAULT_STRIP = 0x7F1D1D,
+    UI_COLOR_FAULT_STRIP = 0x991B1B,
 };
 
 /** Ignore repeat taps on the same control within this window (ms). */
