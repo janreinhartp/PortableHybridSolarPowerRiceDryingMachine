@@ -224,7 +224,6 @@ esp_err_t batch_manager_complete(const sensor_data_t *sensors)
     }
     if (sensors) {
         s_status.final_moisture = sensors->moisture;
-        s_status.final_ec = sensors->ec;
         s_status.final_chamber_temp_c = sensors->chamber_temperature;
         batch_manager_note_chamber_temp(sensors->chamber_temperature);
     }

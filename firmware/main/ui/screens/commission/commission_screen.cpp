@@ -90,7 +90,7 @@ void commission_build(lv_obj_t *parent, const system_status_t *status)
     s_rows[0] = make_sensor_row(parent, 48, "Hot Air Temperature Probe");
     s_rows[1] = make_sensor_row(parent, 120, "Chamber Temperature / Humidity");
     s_rows[2] = make_sensor_row(parent, 192, "Rice Moisture");
-    s_rows[3] = make_sensor_row(parent, 264, "Conductivity (EC)");
+    s_rows[3] = nullptr;
 
     lv_obj_t *hot = ui_theme_make_btn(parent, "Assign Hot Air (1)", on_hotair, nullptr, 320, 48,
                                       UI_COLOR_ACCENT);
@@ -125,6 +125,4 @@ void commission_update(const system_status_t *status)
     set_row(s_rows[1], status->chamber_ok, status->chamber_ok ? detail : "");
     snprintf(detail, sizeof(detail), "%.1f %%", status->moisture_pct);
     set_row(s_rows[2], status->moisture_ok, status->moisture_ok ? detail : "");
-    snprintf(detail, sizeof(detail), "%.2f", status->ec_value);
-    set_row(s_rows[3], status->ec_ok, status->ec_ok ? detail : "");
 }

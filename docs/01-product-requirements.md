@@ -1,5 +1,7 @@
 # 01 - Product Requirements
 
+**Status:** Normative requirements. Implementation status: see [`MASTERPLAN.md`](MASTERPLAN.md).
+
 ## 1. Product Overview
 
 The Solar Hybrid Rice Dryer is a 10 kg/batch automated rice drying machine designed for small-scale rice drying operations.

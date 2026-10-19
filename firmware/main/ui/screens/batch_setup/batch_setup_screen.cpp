@@ -73,7 +73,7 @@ void batch_setup_build(lv_obj_t *parent, const system_status_t *status)
     lv_obj_set_pos(title, 0, 0);
 
     static const char *names[10] = {
-        "Target Moisture", "Drying Temp",  "Cooling Temp", "Hysteresis",
+        "Target Moisture", "Drying Temp",  "Cooling Temp", "Max Hot Air",
         "Circulation",     "Circ Interval", "Circ Run",     "Discharge",
         "Min Drying",      "Max Drying",
     };
@@ -133,7 +133,7 @@ void batch_setup_update(const system_status_t *status)
     lv_label_set_text(s_value_lbls[1], buf);
     snprintf(buf, sizeof(buf), "%.0f °C", status->cooling_temperature_c);
     lv_label_set_text(s_value_lbls[2], buf);
-    snprintf(buf, sizeof(buf), "%.1f °C", status->temperature_hysteresis_c);
+    snprintf(buf, sizeof(buf), "%.0f °C", status->max_hot_air_temperature_c);
     lv_label_set_text(s_value_lbls[3], buf);
     lv_label_set_text(s_value_lbls[4], ui_circ_mode_name(status->circulation_mode));
     snprintf(buf, sizeof(buf), "%u s", (unsigned)status->circulation_interval_s);

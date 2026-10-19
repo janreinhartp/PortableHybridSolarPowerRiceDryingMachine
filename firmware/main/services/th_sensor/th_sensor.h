@@ -39,6 +39,13 @@ esp_err_t th_sensor_set_address(uint8_t current_addr, uint8_t new_addr);
 /** Read back device address register from a probe that still answers at current_addr. */
 esp_err_t th_sensor_get_address(uint8_t current_addr, uint16_t *out_addr);
 
+/**
+ * Write XY-MD03 baud register 0x0102.
+ * Encoding is vendor-specific; common values: 0=9600, 1=14400, 2=19200.
+ * Power-cycle the probe after a successful write, then run ESP at the new rate.
+ */
+esp_err_t th_sensor_set_baud(uint8_t slave_addr, uint16_t baud_code);
+
 #ifdef __cplusplus
 }
 #endif

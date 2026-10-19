@@ -1,5 +1,7 @@
 # 03 - System Architecture
 
+**Status:** Normative architecture. Implementation status: see [`MASTERPLAN.md`](MASTERPLAN.md).
+
 ## 1. Architecture Overview
 
 The Solar Hybrid Rice Dryer uses an ESP32-S3 as the main machine controller.

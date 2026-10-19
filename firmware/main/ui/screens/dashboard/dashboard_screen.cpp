@@ -12,7 +12,6 @@ static ui_metric_t s_moist {};
 static ui_metric_t s_hot {};
 static ui_metric_t s_chamber {};
 static ui_metric_t s_humidity {};
-static ui_metric_t s_ec {};
 static ui_actuator_leds_t s_leds {};
 static lv_obj_t *s_note = nullptr;
 static lv_obj_t *s_ack = nullptr;
@@ -45,7 +44,6 @@ void dashboard_detach(void)
     s_hot = {};
     s_chamber = {};
     s_humidity = {};
-    s_ec = {};
     s_leds = {};
     s_note = nullptr;
     s_ack = nullptr;
@@ -54,7 +52,6 @@ void dashboard_detach(void)
 
 void dashboard_build(lv_obj_t *parent, const system_status_t *status)
 {
-    /* Content parent already has 16 px pad — positions match Figma content−16. */
     lv_obj_t *title =
         ui_theme_make_label(parent, "System Overview", ui_font_title(), UI_COLOR_TEXT);
     lv_obj_set_pos(title, 0, 0);
@@ -68,11 +65,8 @@ void dashboard_build(lv_obj_t *parent, const system_status_t *status)
     s_humidity = ui_metric_create(parent, "Chamber Humidity", 236, 144);
     lv_obj_set_pos(s_humidity.root, 756, 48);
 
-    s_ec = ui_metric_create(parent, "EC", 236, 112);
-    lv_obj_set_pos(s_ec.root, 0, 208);
-
-    s_leds = ui_actuator_row_create(parent, 740, 112);
-    lv_obj_set_pos(s_leds.root, 252, 208);
+    s_leds = ui_actuator_row_create(parent, 992, 112);
+    lv_obj_set_pos(s_leds.root, 0, 208);
 
     s_note = ui_theme_make_label(parent, "", ui_font_body(), UI_COLOR_TEXT);
     lv_obj_set_width(s_note, 640);
@@ -109,7 +103,7 @@ void dashboard_update(const system_status_t *status)
 
     if (status->hotair_ok) {
         snprintf(value, sizeof(value), "%.1f", status->hotair_temp_c);
-        snprintf(detail, sizeof(detail), "Target %.0f °C", status->drying_temperature_c);
+        snprintf(detail, sizeof(detail), "Cap %.0f °C", status->max_hot_air_temperature_c);
     } else {
         snprintf(value, sizeof(value), "Offline");
         snprintf(detail, sizeof(detail), "Sensor unavailable");
@@ -134,14 +128,6 @@ void dashboard_update(const system_status_t *status)
     }
     ui_metric_set(&s_humidity, value, status->chamber_ok ? "%" : "", detail);
 
-    if (status->ec_ok) {
-        snprintf(value, sizeof(value), "%.2f", status->ec_value);
-        snprintf(detail, sizeof(detail), "Conductivity");
-    } else {
-        snprintf(value, sizeof(value), "Offline");
-        snprintf(detail, sizeof(detail), "Sensor unavailable");
-    }
-    ui_metric_set(&s_ec, value, "", detail);
     ui_leds_set(&s_leds, status);
 
     if (status->batch_interrupted) {

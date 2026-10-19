@@ -4,6 +4,7 @@
 
 #include "alarms_screen.h"
 #include "batch_setup_screen.h"
+#include "calibrate_moisture_screen.h"
 #include "commission_screen.h"
 #include "complete_screen.h"
 #include "dashboard_screen.h"
@@ -136,6 +137,7 @@ static bool screen_follows_process(ui_screen_t screen)
     case UI_SCREEN_SYSTEM:
     case UI_SCREEN_MORE:
     case UI_SCREEN_COMMISSION:
+    case UI_SCREEN_CALIBRATE_MOISTURE:
         return false;
     default:
         return true;
@@ -155,6 +157,7 @@ static void detach_all(void)
     system_info_detach();
     more_detach();
     commission_detach();
+    calibrate_moisture_detach();
 }
 
 static void highlight_nav(void)
@@ -172,7 +175,8 @@ static void highlight_nav(void)
         } else if (mapped[i] == UI_SCREEN_MORE) {
             on = (s_screen == UI_SCREEN_MORE || s_screen == UI_SCREEN_MANUAL ||
                   s_screen == UI_SCREEN_SETTINGS || s_screen == UI_SCREEN_HISTORY ||
-                  s_screen == UI_SCREEN_SYSTEM || s_screen == UI_SCREEN_COMMISSION);
+                  s_screen == UI_SCREEN_SYSTEM || s_screen == UI_SCREEN_COMMISSION ||
+                  s_screen == UI_SCREEN_CALIBRATE_MOISTURE);
         } else {
             on = (s_screen == mapped[i]);
         }
@@ -221,6 +225,9 @@ static void update_active(void)
     case UI_SCREEN_COMMISSION:
         commission_update(&s_status);
         break;
+    case UI_SCREEN_CALIBRATE_MOISTURE:
+        calibrate_moisture_update(&s_status);
+        break;
     }
 }
 
@@ -267,6 +274,9 @@ void ui_manager_navigate(ui_screen_t screen)
         break;
     case UI_SCREEN_COMMISSION:
         commission_build(s_content, &s_status);
+        break;
+    case UI_SCREEN_CALIBRATE_MOISTURE:
+        calibrate_moisture_build(s_content, &s_status);
         break;
     }
 }

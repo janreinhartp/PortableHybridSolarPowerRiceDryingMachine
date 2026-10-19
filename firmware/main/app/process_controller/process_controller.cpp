@@ -30,6 +30,9 @@ static bool s_heater_on = false;
 static int64_t s_last_recovery_us = 0;
 static const int64_t k_recovery_interval_us = 30LL * 1000000LL;
 
+static void reset_heater_pid(void);
+static void apply_heater_pid(const sensor_data_t *sensors, const dryer_settings_t *settings);
+
 static bool s_summary_pending = false;
 static bool s_sample_queued_this_tick = false;
 static char s_started[24] = {};
@@ -185,7 +188,6 @@ static void queue_sample(dryer_state_t state, const sensor_data_t *sensors,
     copy_str(sample.fault, sizeof(sample.fault),
              safety_manager_fault_name(safety_manager_active_fault()));
     sample.moisture = sensors->moisture;
-    sample.ec = sensors->ec;
     sample.hot_air_temperature = sensors->hot_air_temperature;
     sample.hot_air_humidity = sensors->hot_air_humidity;
     sample.chamber_temperature = sensors->chamber_temperature;
@@ -238,10 +240,8 @@ static void enqueue_summary(const char *completion, const sensor_data_t *sensors
     summary.discharge_s = batch.discharge_elapsed_s;
     if (batch.completed) {
         summary.final_moisture = batch.final_moisture;
-        summary.final_ec = batch.final_ec;
     } else if (sensors != nullptr) {
         summary.final_moisture = sensors->moisture;
-        summary.final_ec = sensors->ec;
     }
     logger_submit_summary(&summary);
 }
@@ -273,6 +273,7 @@ static void enter_fault(fault_code_t code, const sensor_data_t *sensors,
     }
     safety_manager_request_heater(false);
     s_heater_on = false;
+    reset_heater_pid();
     actuator_manager_stop_door();
     actuator_manager_set_elevator(false);
     s_door_cmd_us = 0;
@@ -347,32 +348,94 @@ static bool check_actuator_timeouts(const sensor_data_t *sensors,
     return false;
 }
 
-static void apply_heater_hysteresis(const sensor_data_t *sensors,
-                                    const dryer_settings_t *settings)
+/* Chamber PID → duty; time-proportioned ON/OFF; hot-air hard cap. */
+static float s_pid_integral = 0.0f;
+static float s_pid_prev_err = 0.0f;
+static int64_t s_pid_window_start_us = 0;
+static float s_pid_duty = 0.0f;
+static float s_heater_duty_pub = 0.0f;
+
+static void reset_heater_pid(void)
+{
+    s_pid_integral = 0.0f;
+    s_pid_prev_err = 0.0f;
+    s_pid_window_start_us = 0;
+    s_pid_duty = 0.0f;
+    s_heater_duty_pub = 0.0f;
+}
+
+static void apply_heater_pid(const sensor_data_t *sensors, const dryer_settings_t *settings)
 {
     if (!sensors->chamber_temp_valid) {
         safety_manager_request_heater(false);
         s_heater_on = false;
+        s_heater_duty_pub = 0.0f;
         return;
     }
 
-    const float t = sensors->chamber_temperature;
-    const float target = settings->drying_temperature_c;
-    const float h = settings->temperature_hysteresis_c;
+    const float sp = settings->drying_temperature_c;
+    const float pv = sensors->chamber_temperature;
+    const float err = sp - pv;
+    const float dt = 1.0f; /* process tick ≈ 1 Hz */
 
-    if (t <= target - h) {
+    s_pid_integral += err * dt;
+    /* Anti-windup clamp */
+    if (s_pid_integral > 50.0f) {
+        s_pid_integral = 50.0f;
+    } else if (s_pid_integral < -50.0f) {
+        s_pid_integral = -50.0f;
+    }
+
+    const float deriv = (err - s_pid_prev_err) / dt;
+    s_pid_prev_err = err;
+
+    float duty = settings->pid_kp * err + settings->pid_ki * s_pid_integral +
+                 settings->pid_kd * deriv;
+    if (duty < 0.0f) {
+        duty = 0.0f;
+    } else if (duty > 100.0f) {
+        duty = 100.0f;
+    }
+
+    /* Hot-air control cap: force heater off when duct is at/above max. */
+    if (sensors->hot_air_temp_valid &&
+        sensors->hot_air_temperature >= settings->max_hot_air_temperature_c) {
+        duty = 0.0f;
+        /* Freeze integral while capped. */
+        s_pid_integral -= err * dt;
+    }
+
+    s_pid_duty = duty;
+    s_heater_duty_pub = duty;
+
+    const uint32_t window_s =
+        settings->pid_window_s >= 10 ? settings->pid_window_s : 20;
+    const int64_t now = esp_timer_get_time();
+    if (s_pid_window_start_us == 0) {
+        s_pid_window_start_us = now;
+    }
+    const int64_t elapsed_us = now - s_pid_window_start_us;
+    const int64_t window_us = (int64_t)window_s * 1000000LL;
+    if (elapsed_us >= window_us) {
+        s_pid_window_start_us = now;
+    }
+    const int64_t on_us = (int64_t)((duty / 100.0f) * (float)window_us);
+    const int64_t into = now - s_pid_window_start_us;
+    const bool want_on = (duty > 0.5f) && (into < on_us);
+
+    if (want_on == s_heater_on) {
+        return; /* write only on state change */
+    }
+
+    if (want_on) {
         if (safety_manager_request_heater(true) == ESP_OK) {
             s_heater_on = true;
         } else {
             s_heater_on = false;
         }
-    } else if (t >= target + h) {
+    } else {
         safety_manager_request_heater(false);
         s_heater_on = false;
-    } else if (s_heater_on) {
-        if (safety_manager_request_heater(true) != ESP_OK) {
-            s_heater_on = false;
-        }
     }
 }
 
@@ -442,7 +505,6 @@ void process_controller_fill_status(system_status_t *status)
     }
     status->initial_moisture_pct = batch.initial_moisture;
     status->final_moisture_pct = batch.final_moisture;
-    status->final_ec = batch.final_ec;
     status->max_chamber_temp_c = batch.max_chamber_temp_c;
     status->avg_chamber_temp_c = batch.avg_chamber_temp_c;
 
@@ -451,7 +513,10 @@ void process_controller_fill_status(system_status_t *status)
     status->target_moisture_pct = cfg.target_moisture_pct;
     status->drying_temperature_c = cfg.drying_temperature_c;
     status->cooling_temperature_c = cfg.cooling_temperature_c;
-    status->temperature_hysteresis_c = cfg.temperature_hysteresis_c;
+    status->pid_kp = cfg.pid_kp;
+    status->pid_ki = cfg.pid_ki;
+    status->pid_kd = cfg.pid_kd;
+    status->pid_window_s = cfg.pid_window_s;
     status->circulation_interval_s = cfg.circulation_interval_s;
     status->circulation_run_time_s = cfg.circulation_run_time_s;
     status->discharge_time_s = cfg.discharge_time_s;
@@ -459,6 +524,7 @@ void process_controller_fill_status(system_status_t *status)
     status->max_drying_time_s = cfg.max_drying_time_s;
     status->max_hot_air_temperature_c = cfg.max_hot_air_temperature_c;
     status->circulation_mode = (uint8_t)cfg.circulation_mode;
+    status->heater_duty_pct = (s_state == DRYER_STATE_DRYING) ? s_heater_duty_pub : 0.0f;
 }
 
 static void publish(const sensor_data_t *sensors, const dryer_settings_t *settings,
@@ -494,6 +560,7 @@ esp_err_t process_controller_init(void)
     s_cooling_elapsed_s = 0;
     s_discharge_elapsed_s = 0;
     s_heater_on = false;
+    reset_heater_pid();
     s_discharge_step = DISCHARGE_OPEN_DOOR;
     s_discharge_phase_pub = 0;
     s_discharge_remaining_pub = 0;
@@ -800,7 +867,10 @@ void process_controller_tick(const sensor_data_t *sensors,
         actuator_manager_set_fan(true);
         /* Door already closed at PRECHECK — do not hold CLOSE coil for the batch. */
         actuator_manager_stop_door();
-        apply_heater_hysteresis(sensors, settings);
+        apply_heater_pid(sensors, settings);
+        if (status != nullptr) {
+            status->heater_duty_pct = s_heater_duty_pub;
+        }
         save_recovery_throttled(sensors, false);
 
         if (s_drying_elapsed_s >= settings->max_drying_time_s) {
@@ -817,6 +887,7 @@ void process_controller_tick(const sensor_data_t *sensors,
         if (moisture_done && min_time_done) {
             safety_manager_request_heater(false);
             s_heater_on = false;
+            reset_heater_pid();
             if (circulation_manager_is_active()) {
                 circulation_manager_stop();
             }

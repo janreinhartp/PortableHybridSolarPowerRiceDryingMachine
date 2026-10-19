@@ -43,12 +43,23 @@ Rice Validation           NOT STARTED (checklist ready)
 
 What exists today:
 
-- Design docs under `docs/01` through `docs/06`, summarized in [README.md](../README.md)
+- Design docs under `docs/01` through `docs/08`, summarized in [README.md](../README.md)
 - Waveshare board demo at [ESP32-S3-Touch-LCD-7B-Demo/15_LVGL_SLIDER](ESP32-S3-Touch-LCD-7B-Demo/15_LVGL_SLIDER), kept as a board reference
-- Product firmware under `firmware/` through Phase 8: board bring-up, TinyRTC, RS485/Modbus, XY-MD03, N4D8B08, ADS1115, Sensor Manager, Actuator Manager, Safety Manager, Settings Manager, Circulation Manager, Process Controller, Batch Manager, queue-based SD logger, product HMI, and local SoftAP read-only web dashboard with CSV export. Manual control remains available for bench tests.
+- Product firmware under `firmware/` through Phase 8: board bring-up, TinyRTC, RS485/Modbus, XY-MD03, N4D8B08, ADS1115, Sensor Manager, Actuator Manager, Safety Manager, Settings Manager, Circulation Manager, Process Controller, Batch Manager, queue-based SD logger, product SCADA HMI, and local SoftAP read-only web dashboard with CSV export. Manual control remains available for bench tests.
 - Phase 9 hardware validation checklist at [data/test-results/phase9-validation-checklist.md](../data/test-results/phase9-validation-checklist.md)
 - GPIO and fieldbus map at [hardware/wiring/esp32-gpio-map.md](../hardware/wiring/esp32-gpio-map.md)
 - Placeholder folders for schematics, PCB, mechanical, calibration data, test results, and tests
+
+Known as-built gaps (honest, not blockers for Phase 9 start):
+
+- Door and elevator use open-loop travel timeouts (no limit-switch GPIOs on the first prototype)
+- F002 (E-stop) is defined for UI/logging but is not raised by the ESP32 (panel electrical only)
+- Manual door-stop API exists; Manual screen has open/close only
+- RTC set/adjust APIs exist; not wired in the HMI
+- Power-loss recovery flags an interrupted batch and requires operator ACK; it does not auto-resume the batch
+- RS485 product baud is **19200**; commission N4D8B08 DIP + XY-MD03 baud reg `0x0102` before flashing if devices still ship at 9600
+
+As-built heater control: chamber PID with time-proportioned relay duty + hot-air hard cap (`max_hot_air_temperature_c`). Moisture: 3-point piecewise calibration via System → Calibrate Moisture. EC is not used.
 
 Next implementation step: **Phase 9 — Validation** (dry run → empty chamber → small batch → 10 kg).
 
@@ -136,7 +147,7 @@ One I2C bus serves:
 | GT911 | board-defined | Touch |
 | IO expander | `0x24` | Backlight, resets, SD select |
 | TinyRTC | `0x68` | Date and time |
-| ADS1115 | `0x48` default | Moisture and EC ADC |
+| ADS1115 | `0x48` default | Moisture ADC (AIN2); AIN3 unused |
 
 Do not start a second I2C controller. Confirm that every address is unique before enabling the ADS1115 driver.
 
@@ -221,7 +232,8 @@ Default process settings:
 |---|---:|
 | Target moisture | 14% |
 | Drying temperature | 50°C |
-| Temperature hysteresis | 2°C |
+| Chamber PID (Kp/Ki/Kd) + window | 4.0 / 0.05 / 8.0 / 20 s |
+| Hot-air max (cap + F001) | 70°C |
 | Cooling temperature | 35°C |
 | Circulation mode | Interval |
 | Circulation interval | 2 min |
@@ -271,66 +283,34 @@ firmware/
     │   ├── settings_manager/   # Phase 5
     │   ├── circulation_manager/# Phase 5
     │   ├── logger/             # Phase 7 queue + SD
+    │   ├── web_server/         # Phase 8 SoftAP read-only
     │   └── rtc_manager/
     └── ui/
+        ├── theme/              # SCADA palette + typography
+        ├── widgets/            # shared KPI / bar / actuator tiles
+        ├── trend_buffer/       # RAM moisture + chamber trends
         ├── ui_manager/         # shell, navigation, 1 Hz refresh
-        └── screens/            # Phase 7 product HMI
-            ├── dashboard/
+        └── screens/            # Phase 7 product HMI (08 guideline)
+            ├── dashboard/      # Home
             ├── batch_setup/
-            ├── drying/
-            ├── cooling/
-            ├── discharge/
+            ├── run/            # Drying / Cooling / Discharging
             ├── complete/
+            ├── alarms/
+            ├── more/
             ├── manual_control/
             ├── settings/
             ├── history/
-            ├── alarms/
-            └── system_info/
+            ├── system_info/
+            └── commission/
 ```
 
-## 6.2 Target end-state
+## 6.2 Later additions (post–Phase 8)
 
-Add these as later phases land. Keep Phase 3–5 modules until replaced.
+Optional modules not required for Phase 9 validation. Keep Phase 3–8 modules until replaced.
 
 ```text
-firmware/
-├── CMakeLists.txt
-├── sdkconfig.defaults
-├── components/                  # Waveshare board drivers + product drivers
-│   ├── rgb_lcd_port/
-│   ├── touch/
-│   ├── i2c/
-│   ├── io_extension/
-│   ├── lvgl_port/
-│   ├── sd/
-│   ├── gpio/
-│   ├── rs485/
-│   ├── modbus/
-│   ├── ads1115/
-│   ├── rtc/
-│   └── relay/
-└── main/
-    ├── main.cpp
-    ├── system_status.h
-    ├── board/
-    ├── app/
-    │   ├── dryer_controller/
-    │   ├── process_controller/   # Phase 6
-    │   ├── safety_manager/       # Phase 5
-    │   └── batch_manager/        # Phase 6
-    ├── services/
-    │   ├── th_sensor/
-    │   ├── sensor_manager/
-    │   ├── circulation_manager/  # Phase 5
-    │   ├── actuator_manager/
-    │   ├── settings_manager/     # Phase 5
-    │   ├── logger/               # Phase 7
-    │   ├── diagnostics/          # later
-    │   ├── web_server/           # Phase 8
-    │   └── rtc_manager/
-    └── ui/
-        ├── ui_manager/           # Phase 7
-        └── screens/              # Phase 7
+firmware/main/services/
+└── diagnostics/          # later — deeper field diagnostics
 ```
 
 Language choice:
@@ -472,7 +452,7 @@ Tasks:
 
 ### XY-MD03 temperature/humidity probes
 
-Model: XY-MD03 (PE probe, SHT40), Modbus-RTU over RS485, default **9600 8N1**.
+Model: XY-MD03 (PE probe, SHT40), Modbus-RTU over RS485. Product bus rate: **19200 8N1** (factory default is often 9600 — commission baud before relying on the ESP).
 
 | Item | Value |
 |---|---|
@@ -480,18 +460,25 @@ Model: XY-MD03 (PE probe, SHT40), Modbus-RTU over RS485, default **9600 8N1**.
 | Bus | Yellow = A, White = B (+ common GND) |
 | Read T/H | FC **0x04**, start reg **0x0001**, count **2** → temp×10, humidity×10 |
 | Device address register | Holding **0x0101** (FC03 read / FC06 write), range **1–247** |
-| Baud register | Holding **0x0102** (keep **9600**) |
+| Baud register | Holding **0x0102** — codes **0=9600**, **1=14400**, **2=19200**; helper `th_sensor_set_baud(addr, 2)` |
 
 There is **no address DIP**. Both probes usually ship as slave **1**. Address is changed by writing register `0x0101` over Modbus (and must persist after power cycle).
 
-**Commissioning procedure (one sensor on the bus at a time):**
+**Baud + address commissioning (full procedure):**
 
-1. Move the relay board off address 1 (N4D8B08 DIP **A1+A3 ON** → address **10**; A0+A3 is 9) so it does not collide.
-2. Connect **only one** XY-MD03 (plus power + A/B/GND).
-3. Use HMI **Sensor Setup**: probe current ID → assign **Hot-air = 1** or **Chamber = 2**.
-4. Power-cycle or wait for the probe to accept the new ID, confirm it answers at the new address.
-5. Disconnect, connect the second probe (still at factory ID 1), assign the other role.
-6. Connect both probes + relay and confirm hot-air @1, chamber @2, relay @10.
+Detailed switch tables and order live in [`hardware/wiring/esp32-gpio-map.md`](../hardware/wiring/esp32-gpio-map.md) §5.1. Summary:
+
+1. **Relay N4D8B08 (power off):** address DIP **A1+A3 ON** → ID **10**. Set baud DIP pair to **19200** (typical: BR1=OFF, BR0=ON — confirm silk/PDF). Power on.
+2. **Hot-air XY-MD03 (one probe only, host still @ 9600 if factory):** FC06 write holding **0x0102 = 2**, power-cycle probe, then assign address **1** (HMI Commission or `0x0101`).
+3. **Chamber XY-MD03 (second probe alone @ 9600):** same baud write **0x0102 = 2**, power-cycle, assign address **2**.
+4. **ESP32:** run firmware at **19200**. Reconnect all three devices; verify hot-air @1, chamber @2, relay @10.
+
+**Address-only reminder (after baud is already 19200):**
+
+1. Relay already at **10**.
+2. Connect **only one** XY-MD03 → HMI Commission → **Assign Hot Air (1)** or **Assign Chamber (2)**.
+3. Power-cycle the probe; confirm it answers at the new ID.
+4. Repeat for the second probe; reconnect both.
 
 Firmware must expose:
 
@@ -610,7 +597,7 @@ After reboot:
   No automatic heater restart
 ```
 
-Acceptance:
+Acceptance (firmware for these behaviors is **in tree**; checkboxes mean hardware dry-run sign-off in Phase 9, not “still to code”):
 
 ```text
 [ ] IDLE -> PRECHECK -> DRYING -> COOLING -> DISCHARGING -> COMPLETE
@@ -779,13 +766,14 @@ Electrical E-stop is validated on the panel (contactor drop), not as an ESP32 in
 
 Do not implement these before the baseline dryer works:
 
-- PID heater control
 - Cloud or phone remote control
 - Web-based actuator control
 - Inverter, MPPT, or battery monitoring
 - Solar production analytics
 - AI drying optimization
 - Automatic loading
+
+Chamber PID + hot-air cap, 3-point moisture calibration HMI, boot splash, and RS485 @ 19200 are in the baseline.
 
 ---
 
@@ -800,7 +788,7 @@ The project is ready for normal operation when:
 [ ] Electrical protection installed
 [ ] Independent thermal protection installed
 [ ] Emergency stop tested electrically (main contactor drop)
-[ ] ADS1115 moisture/EC path validated
+[ ] ADS1115 moisture path validated
 ```
 
 ### Software

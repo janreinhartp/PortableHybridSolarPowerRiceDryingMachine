@@ -18,6 +18,7 @@ typedef enum {
     UI_SCREEN_SYSTEM,
     UI_SCREEN_MORE,
     UI_SCREEN_COMMISSION,
+    UI_SCREEN_CALIBRATE_MOISTURE,
     /* Legacy aliases kept for any external callers */
     UI_SCREEN_DRYING = UI_SCREEN_RUN,
     UI_SCREEN_COOLING = UI_SCREEN_RUN,

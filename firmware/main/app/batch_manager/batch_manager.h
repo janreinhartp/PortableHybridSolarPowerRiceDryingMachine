@@ -36,7 +36,6 @@ typedef struct {
     float initial_moisture;
     float initial_chamber_temp_c;
     float final_moisture;
-    float final_ec;
     float final_chamber_temp_c;
     float max_chamber_temp_c;
     float avg_chamber_temp_c;

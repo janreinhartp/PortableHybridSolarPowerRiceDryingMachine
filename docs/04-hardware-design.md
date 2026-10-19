@@ -1,5 +1,7 @@
 # 04 - Hardware Design
 
+**Status:** Normative hardware design. Implementation status: see [`MASTERPLAN.md`](MASTERPLAN.md).
+
 ## 1. Purpose
 
 This document defines the hardware architecture, electrical interfaces, actuator connections, sensor connections, power distribution, and hardware safety requirements for the 10 kg/batch Solar Hybrid Rice Dryer.
@@ -436,7 +438,7 @@ The controller can then verify:
 
 If position feedback is not implemented in the first prototype, a conservative movement timer shall be used.
 
-However, position feedback is strongly recommended for the final machine.
+**As-built (first prototype):** door and elevator use open-loop travel timeouts in firmware; no limit-switch GPIOs are mapped on the ESP32. Position feedback is strongly recommended for the final machine.
 
 ---
 

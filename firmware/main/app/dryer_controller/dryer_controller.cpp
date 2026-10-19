@@ -21,6 +21,13 @@
 
 static const char *TAG = "dryer_ctrl";
 
+static void report(dryer_init_progress_fn progress, void *user, const char *id, bool ok)
+{
+    if (progress != nullptr) {
+        progress(id, ok, user);
+    }
+}
+
 static void refresh_heap(system_status_t *status)
 {
     status->free_heap = heap_caps_get_free_size(MALLOC_CAP_8BIT);
@@ -43,7 +50,8 @@ static void refresh_rtc(system_status_t *status)
     }
 }
 
-esp_err_t dryer_controller_init(system_status_t *status)
+esp_err_t dryer_controller_init(system_status_t *status, dryer_init_progress_fn progress,
+                                void *progress_user)
 {
     if (status == nullptr) {
         return ESP_ERR_INVALID_ARG;
@@ -52,7 +60,7 @@ esp_err_t dryer_controller_init(system_status_t *status)
     *status = {};
     refresh_heap(status);
 
-    ESP_LOGI(TAG, "Phase 8 bring-up starting");
+    ESP_LOGI(TAG, "Bring-up starting");
 
     board_hal_status_t board {};
     esp_err_t err = board_hal_init(&board);
@@ -67,8 +75,14 @@ esp_err_t dryer_controller_init(system_status_t *status)
     if (err != ESP_OK) {
         refresh_heap(status);
         ESP_LOGE(TAG, "Board bring-up failed: %s", esp_err_to_name(err));
+        report(progress, progress_user, "display", false);
+        report(progress, progress_user, "sd", status->sd_ok);
         return err;
     }
+
+    report(progress, progress_user, "display",
+           status->display_ok && status->touch_ok && status->lvgl_ok);
+    report(progress, progress_user, "sd", status->sd_ok);
 
     esp_err_t rtc_err = rtc_manager_init();
     status->rtc_ok = (rtc_err == ESP_OK);
@@ -77,10 +91,14 @@ esp_err_t dryer_controller_init(system_status_t *status)
     } else {
         ESP_LOGW(TAG, "RTC init failed: %s", esp_err_to_name(rtc_err));
     }
+    report(progress, progress_user, "rtc", status->rtc_ok);
 
     /* ADS1115 + calibration after shared I2C is up (touch bring-up). */
     sensor_manager_init();
-    status->ads1115_ok = false;
+    sensor_data_t snap {};
+    sensor_manager_get(&snap);
+    status->ads1115_ok = snap.ads1115_ok;
+    report(progress, progress_user, "moisture", status->ads1115_ok);
 
     settings_manager_init();
     safety_manager_init();
@@ -93,14 +111,20 @@ esp_err_t dryer_controller_init(system_status_t *status)
 
     batch_manager_init();
     process_controller_init();
-    if (logger_init(status->sd_ok) != ESP_OK) {
+    report(progress, progress_user, "core", true);
+
+    const bool logger_ok = (logger_init(status->sd_ok) == ESP_OK);
+    if (!logger_ok) {
         ESP_LOGW(TAG, "Logger init failed");
     }
+    report(progress, progress_user, "logger", logger_ok && status->sd_ok);
 
     esp_err_t bus_err = modbus_rtu_init();
     status->rs485_ok = (bus_err == ESP_OK);
+    report(progress, progress_user, "rs485", status->rs485_ok);
     if (bus_err != ESP_OK) {
         ESP_LOGE(TAG, "RS485/Modbus init failed: %s", esp_err_to_name(bus_err));
+        report(progress, progress_user, "relay", false);
     } else {
         th_sensor_init();
         relay_modbus_init();
@@ -110,6 +134,7 @@ esp_err_t dryer_controller_init(system_status_t *status)
         status->chamber_ok = false;
         /* Safe outputs again after actuator init (Process already requested). */
         process_controller_init();
+        report(progress, progress_user, "relay", true);
     }
 
     process_controller_fill_status(status);
@@ -117,10 +142,8 @@ esp_err_t dryer_controller_init(system_status_t *status)
     status->logger_dropped = logger_dropped_count();
     refresh_heap(status);
     ESP_LOGI(TAG, "Bring-up done rtc=%s rs485=%s sd=%s heap=%u",
-             status->rtc_ok ? "ok" : "fail",
-             status->rs485_ok ? "ok" : "fail",
-             status->sd_ok ? "ok" : "fail",
-             (unsigned)status->free_heap);
+             status->rtc_ok ? "ok" : "fail", status->rs485_ok ? "ok" : "fail",
+             status->sd_ok ? "ok" : "fail", (unsigned)status->free_heap);
     return ESP_OK;
 }
 
@@ -161,11 +184,8 @@ void dryer_controller_poll_fieldbus(system_status_t *status)
     status->chamber_rh = sensors.chamber_humidity;
     status->ads1115_ok = sensors.ads1115_ok;
     status->moisture_ok = sensors.moisture_valid;
-    status->ec_ok = sensors.ec_valid;
     status->moisture_pct = sensors.moisture;
-    status->ec_value = sensors.ec;
     status->moisture_voltage = sensors.moisture_voltage;
-    status->ec_voltage = sensors.ec_voltage;
 
     dryer_settings_t settings {};
     settings_manager_get(&settings);
@@ -213,7 +233,6 @@ void dryer_controller_poll_fieldbus(system_status_t *status)
         } else {
             snprintf(s_fault_time, sizeof(s_fault_time), "NO-RTC");
         }
-        /* Prefer the state that was running when the fault appeared. */
         const dryer_state_t shown =
             (state_before != DRYER_STATE_FAULT) ? state_before
                                                 : process_controller_get_state();

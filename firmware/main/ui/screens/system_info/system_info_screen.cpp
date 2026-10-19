@@ -16,6 +16,13 @@ static void on_commission(lv_event_t *e)
     }
 }
 
+static void on_calibrate(lv_event_t *e)
+{
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
+        ui_manager_navigate(UI_SCREEN_CALIBRATE_MOISTURE);
+    }
+}
+
 static lv_obj_t *make_tile(lv_obj_t *parent, lv_coord_t x, lv_coord_t y, const char *heading)
 {
     lv_obj_t *card = ui_theme_make_card(parent, 320, 120);
@@ -76,9 +83,12 @@ void system_info_build(lv_obj_t *parent, const system_status_t *status, unsigned
     s_tiles[4] = make_tile(parent, 336, 184, "Heap");
     s_tiles[5] = make_tile(parent, 672, 184, "Sensors");
 
-    lv_obj_t *comm = ui_theme_make_btn(parent, "Commission Sensors", on_commission, nullptr, 992,
+    lv_obj_t *comm = ui_theme_make_btn(parent, "Commission Sensors", on_commission, nullptr, 488,
                                        64, UI_COLOR_TEAL);
     lv_obj_set_pos(comm, 0, 336);
+    lv_obj_t *cal = ui_theme_make_btn(parent, "Calibrate Moisture", on_calibrate, nullptr, 488,
+                                      64, UI_COLOR_ACCENT);
+    lv_obj_set_pos(cal, 504, 336);
 
     s_alive = true;
     system_info_update(status, touch_taps);
@@ -119,9 +129,8 @@ void system_info_update(const system_status_t *status, unsigned touch_taps)
 
     snprintf(v, sizeof(v), "%s",
              (status->hotair_ok && status->chamber_ok && status->moisture_ok) ? "Ok" : "Check");
-    snprintf(d, sizeof(d), "Hot %s / Ch %s / Moist %s / EC %s",
-             status->hotair_ok ? "Ok" : "X", status->chamber_ok ? "Ok" : "X",
-             status->moisture_ok ? "Ok" : "X", status->ec_ok ? "Ok" : "X");
+    snprintf(d, sizeof(d), "Hot %s / Ch %s / Moist %s", status->hotair_ok ? "Ok" : "X",
+             status->chamber_ok ? "Ok" : "X", status->moisture_ok ? "Ok" : "X");
     set_tile(s_tiles[5], v, d);
 
     (void)s_tap_counter;

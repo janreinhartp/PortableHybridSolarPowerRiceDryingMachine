@@ -1,5 +1,7 @@
 # 05 Software Design
 
+**Status:** Firmware architecture. As-built Phases 0–8 plus boot splash, 3-point moisture cal HMI, chamber PID heater, EC removed, RS485 @ 19200. Implementation status: see [`MASTERPLAN.md`](MASTERPLAN.md).
+
 ## 1. Purpose
 
 This document defines the software architecture and implementation design for the 10 kg/batch Hybrid Solar Power Rice Dryer.
@@ -178,7 +180,7 @@ There is no software-controlled loading stage.
 
 # 4. Service Modules
 
-As-built services:
+As-built services (Phases 0–8):
 
 ```text
 services/
@@ -188,18 +190,18 @@ services/
 ├── settings_manager/       # Phase 5
 ├── circulation_manager/    # Phase 5
 ├── logger/                 # Phase 7 queue + SD
+├── web_server/             # Phase 8 SoftAP read-only
 └── rtc_manager/
 ```
 
-Still later:
+Later (optional, post–Phase 8):
 
 ```text
 services/
-├── diagnostics/
-└── web_server/             # Phase 8
+└── diagnostics/
 ```
 
-`th_sensor/` remains the low-level XY-MD03 helper. Sensor Manager owns the combined T/H + ADS1115 moisture/EC snapshot.
+`th_sensor/` remains the low-level XY-MD03 helper. Sensor Manager owns the combined T/H + ADS1115 moisture snapshot (3-point piecewise cal; EC removed).
 
 ---
 
@@ -209,8 +211,7 @@ The Sensor Manager provides a common interface for all sensors.
 
 Sensors include:
 
-- Moisture sensor
-- EC sensor
+- Moisture sensor (ADS1115)
 - Hot-air temperature
 - Hot-air relative humidity
 - Drying chamber temperature
@@ -353,20 +354,7 @@ Calibration must be performed using reference moisture measurements.
 
 # 8. EC Measurement
 
-EC is monitored as a process parameter.
-
-EC does not directly determine batch completion in the initial design.
-
-The system shall:
-
-- Read EC
-- Validate EC
-- Display EC
-- Log EC
-- Detect abnormal readings
-- Store calibration parameters
-
-EC processing must remain separate from moisture processing.
+EC is **not used** in the product firmware. ADS1115 AIN3 is unused.
 
 ---
 
@@ -562,36 +550,11 @@ Data logging is active.
 
 # 15. Heater Control
 
-The initial heater controller uses hysteresis.
+Heater control uses a chamber-temperature PID that outputs a duty cycle (0–100%). The binary Modbus relay applies that duty as time-proportioned ON/OFF over `pid_window_s` (default 20 s). Writes occur only on state change.
 
-Example:
+Hot-air temperature hard-caps the duty to 0 when `hot_air >= max_hot_air_temperature_c` (control cap). Safety F001 still latches the same hot-air limit.
 
-```text
-Target Temperature = 50°C
-Hysteresis = 2°C
-```
-
-Control limits:
-
-```text
-48°C -> Heater ON
-52°C -> Heater OFF
-```
-
-Between the limits, the previous heater state is maintained.
-
-Example:
-
-```cpp
-if (temperature <= targetTemperature - hysteresis) {
-    heaterOn();
-}
-else if (temperature >= targetTemperature + hysteresis) {
-    heaterOff();
-}
-```
-
-The exact implementation must also include safety limits.
+Process variable: chamber temperature. Setpoint: `drying_temperature_c`.
 
 ---
 
@@ -602,9 +565,9 @@ Normal temperature control is separate from safety temperature limits.
 Example:
 
 ```text
-Normal Target       = 50°C
-Normal Hysteresis   = ±2°C
-Maximum Safe Temp   = Configurable
+Normal Target (chamber) = 50°C
+PID Kp/Ki/Kd / window   = configurable
+Maximum Hot-Air Cap     = Configurable (F001)
 ```
 
 If the maximum safe temperature is exceeded:
@@ -1015,47 +978,39 @@ Normal process commands must never override a safety shutdown.
 
 # 31. HMI Software
 
-The LVGL interface should be divided into screens.
+The LVGL SCADA HMI is implemented in `firmware/main/ui/` per [`08-hmi-design-guideline.md`](08-hmi-design-guideline.md). Visual tokens, shell layout, and acceptance live there; behavior rules below remain binding.
 
-Recommended screens:
+As-built screens:
 
 ```text
-Dashboard
-Batch Setup
-Drying Process
-Manual Control
-Batch History
-Settings
+Home (dashboard/)     — metrics, actuators, Start Batch
+Batch Setup           — settings snapshot + readiness + Start
+Run (run/)            — DRYING / COOLING / DISCHARGING (one screen)
+Complete
 Alarms
-System Information
+More → Manual, Settings, History, System Info, Commission
 ```
+
+Legacy separate Drying / Cooling / Discharge screens are not in the build; **Run** replaces them.
+
+Architecture non-negotiables:
+
+- UI commands go only through Process Controller / Safety Manager
+- LVGL updates hold `lvgl_port_lock()` briefly
+- START is gated on precheck readiness
+- Fault ACK must not clear an active over-temperature trip
+- Manual / Settings / History / System / More / Commission do not auto-leave when process state changes
 
 ---
 
-# 32. Dashboard Screen
+# 32. Dashboard Screen (Home)
 
-The dashboard displays:
+The Home screen displays:
 
-- Current process state
-- Moisture
-- EC
-- Hot-air temperature
-- Hot-air humidity
-- Chamber temperature
-- Chamber humidity
-- Heater status
-- Fan status
-- Elevator status
-- Door status
-- Current batch status
-
-The dashboard should provide quick access to:
-
-```text
-START BATCH
-SETTINGS
-HISTORY
-```
+- Rice moisture, hot-air temp, chamber temp, chamber humidity
+- EC and heater / fan / elevator / door status
+- Current process state (header chip) and batch note
+- **Start Batch**; **Acknowledge Interrupt** when an interrupted batch is pending
 
 ---
 
@@ -1071,75 +1026,41 @@ Before starting a batch, the operator can review:
 - Circulation run time
 - Discharge time
 
-The operator confirms the settings before starting.
+The screen shows a readiness checklist. The operator confirms settings (or opens Settings) before starting.
 
 ---
 
-# 34. Drying Process Screen
+# 34. Run Screen
 
-During DRYING, the screen should display:
+One screen covers DRYING, COOLING, and DISCHARGING; layout and accents restyle by process state.
 
-```text
-DRYING
+Typical content:
 
-Moisture:       XX.X %
-Target:         XX.X %
-
-Temperature:    XX.X °C
-Humidity:       XX.X %
-
-Heater:         ON/OFF
-Fan:            ON
-Elevator:       ON/OFF
-
-Elapsed Time:   HH:MM:SS
-```
-
-A progress indicator may be provided based on moisture reduction.
+- Horizontal bar gauges for moisture % and chamber °C (with targets)
+- Dual RAM trend chart (moisture + chamber)
+- Actuator status row
+- Phase timer
+- **Abort Batch** with confirm dialog
 
 ---
 
-# 35. Cooling Screen
+# 35. Complete Screen
 
-During COOLING:
-
-```text
-COOLING
-
-Temperature:    XX.X °C
-Target:         XX.X °C
-
-Fan:            ON
-Heater:         OFF
-Elevator:       OFF
-Door:           CLOSED
-```
+Shows result KPIs and a trend snapshot, with navigation to **History** and **New Batch**.
 
 ---
 
-# 36. Discharge Screen
+# 36. Alarms Screen
 
-During DISCHARGING:
-
-```text
-DISCHARGING
-
-Door:           OPEN
-Elevator:       ON
-
-Remaining:
-00:45
-```
-
-The remaining discharge time should be clearly visible.
+Split layout: active fault card + **Acknowledge Fault**; Recent Alarms list. A fault strip under the header is visible while `active_fault ≠ 0`.
 
 ---
 
 # 37. Manual Control Screen
 
-Manual control is intended for testing and maintenance.
+Manual control is intended for testing and maintenance (under More).
 
-Available controls may include:
+Available controls:
 
 - Heater
 - Fan
@@ -1147,7 +1068,7 @@ Available controls may include:
 - Door Open
 - Door Close
 
-Manual control must only be available when process control permits it.
+Manual control must only be available when process control permits it (`IDLE` / `COMPLETE`).
 
 The software must prevent unsafe combinations.
 
@@ -1358,11 +1279,9 @@ The system does not require internet access for timekeeping.
 
 # 45. Local Web Server
 
-The ESP32-S3 provides a local web interface through Wi-Fi.
+The ESP32-S3 SoftAP read-only web dashboard is implemented in `firmware/main/services/web_server/`.
 
-Initial implementation should be read-only.
-
-The web interface can display:
+The web interface displays:
 
 - Current state
 - Sensor readings
@@ -1371,6 +1290,8 @@ The web interface can display:
 - Faults
 - Current settings
 - Batch history
+
+CSV export from `/sdcard` is supported. No web endpoint can move an actuator.
 
 The touchscreen remains the primary control interface.
 
@@ -1780,7 +1701,7 @@ The software must enforce:
 
 Low-level drivers live under `firmware/components/` (ESP-IDF components), not under `main/drivers/`. Application, services, board HAL, and UI live under `firmware/main/`.
 
-### As-built (Phases 0–7)
+### As-built (Phases 0–8)
 
 ```text
 firmware/
@@ -1815,52 +1736,39 @@ firmware/
     │   ├── settings_manager/   # Phase 5
     │   ├── circulation_manager/# Phase 5
     │   ├── logger/             # Phase 7
+    │   ├── web_server/         # Phase 8 SoftAP read-only
     │   └── rtc_manager/
     └── ui/
+        ├── theme/
+        ├── widgets/
+        ├── trend_buffer/
         ├── ui_manager/         # Phase 7 shell
-        └── screens/            # Phase 7 product HMI
+        └── screens/            # Phase 7 product HMI (08 guideline)
+            ├── boot/           # Bring-up splash
+            ├── dashboard/      # Home
+            ├── batch_setup/
+            ├── run/            # Drying / Cooling / Discharging
+            ├── complete/
+            ├── alarms/
+            ├── more/
+            ├── manual_control/
+            ├── settings/
+            ├── history/
+            ├── system_info/
+            ├── commission/
+            └── calibrate_moisture/
 ```
 
-### Target end-state (later phases)
+### Later additions (post–Phase 8)
+
+Optional modules not required for Phase 9 validation:
 
 ```text
-firmware/
-├── components/
-│   └── ...existing (including ads1115)...
-└── main/
-    ├── main.cpp
-    ├── system_status.h
-    ├── board/
-    ├── app/
-    │   ├── dryer_controller/
-    │   ├── process_controller/   # Phase 6 (done)
-    │   ├── safety_manager/       # Phase 5 (done)
-    │   └── batch_manager/        # Phase 6 (done)
-    ├── services/
-    │   ├── th_sensor/
-    │   ├── sensor_manager/
-    │   ├── circulation_manager/  # Phase 5 (done)
-    │   ├── actuator_manager/
-    │   ├── settings_manager/     # Phase 5 (done)
-    │   ├── logger/               # Phase 7
-    │   ├── diagnostics/          # later
-    │   ├── web_server/           # Phase 8 — planned
-    │   └── rtc_manager/
-    └── ui/
-        ├── ui_manager/
-        ├── screens/              # Phase 7 product HMI
-        │   ├── dashboard/
-        │   ├── batch_setup/
-        │   ├── drying/
-        │   ├── cooling/
-        │   ├── discharge/
-        │   ├── manual_control/
-        │   ├── history/
-        │   ├── settings/
-        │   ├── alarms/
-        │   └── system_info/
-        └── components/
+firmware/main/services/
+└── diagnostics/          # later — deeper field diagnostics
 ```
+
+Implementation status and known as-built gaps: see [`MASTERPLAN.md`](MASTERPLAN.md).
 
 ---
 
@@ -2195,7 +2103,7 @@ The software shall follow these principles:
 8. **Batch data is stored locally**
 9. **Settings are persistent**
 10. **The touchscreen is the primary control interface**
-11. **The initial web dashboard is read-only**
+11. **The web dashboard is read-only (SoftAP GET APIs only)**
 12. **Power loss must result in a safe restart**
 13. **Hardware safety remains independent of software**
 14. **The system must be modular and maintainable**

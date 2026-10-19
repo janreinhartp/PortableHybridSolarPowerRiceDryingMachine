@@ -11,8 +11,11 @@
 enum {
     F_MOIST = 0,
     F_DRY,
-    F_HYST,
     F_COOL,
+    F_KP,
+    F_KI,
+    F_KD,
+    F_WIN,
     F_MODE,
     F_INTERVAL,
     F_RUN,
@@ -57,12 +60,6 @@ static void clamp_draft(void)
     if (s_draft.drying_temperature_c > 65.0f) {
         s_draft.drying_temperature_c = 65.0f;
     }
-    if (s_draft.temperature_hysteresis_c < 0.5f) {
-        s_draft.temperature_hysteresis_c = 0.5f;
-    }
-    if (s_draft.temperature_hysteresis_c > 20.0f) {
-        s_draft.temperature_hysteresis_c = 20.0f;
-    }
     if (s_draft.cooling_temperature_c < 10.0f) {
         s_draft.cooling_temperature_c = 10.0f;
     }
@@ -71,6 +68,30 @@ static void clamp_draft(void)
     }
     if (s_draft.cooling_temperature_c >= s_draft.drying_temperature_c) {
         s_draft.cooling_temperature_c = s_draft.drying_temperature_c - 1.0f;
+    }
+    if (s_draft.pid_kp < 0.0f) {
+        s_draft.pid_kp = 0.0f;
+    }
+    if (s_draft.pid_kp > 100.0f) {
+        s_draft.pid_kp = 100.0f;
+    }
+    if (s_draft.pid_ki < 0.0f) {
+        s_draft.pid_ki = 0.0f;
+    }
+    if (s_draft.pid_ki > 10.0f) {
+        s_draft.pid_ki = 10.0f;
+    }
+    if (s_draft.pid_kd < 0.0f) {
+        s_draft.pid_kd = 0.0f;
+    }
+    if (s_draft.pid_kd > 100.0f) {
+        s_draft.pid_kd = 100.0f;
+    }
+    if (s_draft.pid_window_s < 10) {
+        s_draft.pid_window_s = 10;
+    }
+    if (s_draft.pid_window_s > 60) {
+        s_draft.pid_window_s = 60;
     }
     if (s_draft.max_hot_air_temperature_c <= s_draft.drying_temperature_c) {
         s_draft.max_hot_air_temperature_c = s_draft.drying_temperature_c + 1.0f;
@@ -103,8 +124,11 @@ static void render_values(void)
     char storage[F_COUNT][48];
     snprintf(storage[F_MOIST], sizeof(storage[0]), "%.1f %%", s_draft.target_moisture_pct);
     snprintf(storage[F_DRY], sizeof(storage[0]), "%.0f °C", s_draft.drying_temperature_c);
-    snprintf(storage[F_HYST], sizeof(storage[0]), "%.1f °C", s_draft.temperature_hysteresis_c);
     snprintf(storage[F_COOL], sizeof(storage[0]), "%.0f °C", s_draft.cooling_temperature_c);
+    snprintf(storage[F_KP], sizeof(storage[0]), "%.1f", s_draft.pid_kp);
+    snprintf(storage[F_KI], sizeof(storage[0]), "%.2f", s_draft.pid_ki);
+    snprintf(storage[F_KD], sizeof(storage[0]), "%.1f", s_draft.pid_kd);
+    snprintf(storage[F_WIN], sizeof(storage[0]), "%u s", (unsigned)s_draft.pid_window_s);
     snprintf(storage[F_MODE], sizeof(storage[0]), "%s",
              ui_circ_mode_name((uint8_t)s_draft.circulation_mode));
     snprintf(storage[F_INTERVAL], sizeof(storage[0]), "%u s",
@@ -137,11 +161,20 @@ static void on_adjust(lv_event_t *e)
     case F_DRY:
         s_draft.drying_temperature_c += (float)arg->sign;
         break;
-    case F_HYST:
-        s_draft.temperature_hysteresis_c += 0.5f * (float)arg->sign;
-        break;
     case F_COOL:
         s_draft.cooling_temperature_c += (float)arg->sign;
+        break;
+    case F_KP:
+        s_draft.pid_kp += 0.5f * (float)arg->sign;
+        break;
+    case F_KI:
+        s_draft.pid_ki += 0.01f * (float)arg->sign;
+        break;
+    case F_KD:
+        s_draft.pid_kd += 0.5f * (float)arg->sign;
+        break;
+    case F_WIN:
+        s_draft.pid_window_s = step_u32(s_draft.pid_window_s, 5 * arg->sign, 10);
         break;
     case F_MODE:
         s_draft.circulation_mode =
@@ -216,9 +249,10 @@ void settings_build(lv_obj_t *parent, const system_status_t *status)
     clamp_draft();
 
     static const char *names[F_COUNT] = {
-        "Target Moisture", "Drying Temp",     "Hysteresis",  "Cooling Temp",
-        "Circulation",     "Circ Interval",   "Circ Run",    "Discharge",
-        "Min Drying",      "Max Drying",      "Max Hot Air",
+        "Target Moisture", "Drying Temp",   "Cooling Temp", "PID Kp",
+        "PID Ki",          "PID Kd",        "PID Window",   "Circulation",
+        "Circ Interval",   "Circ Run",      "Discharge",    "Min Drying",
+        "Max Drying",      "Max Hot Air",
     };
 
     lv_obj_t *title = ui_theme_make_label(parent, "Settings", ui_font_title(), UI_COLOR_TEXT);

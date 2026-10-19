@@ -99,7 +99,7 @@ static esp_err_t open_batch_file(const char *batch_id)
     strncpy(s_open_batch, batch_id, sizeof(s_open_batch) - 1);
     if (fseek(s_batch_file, 0, SEEK_END) == 0 && ftell(s_batch_file) == 0) {
         fprintf(s_batch_file,
-                "Timestamp,Batch ID,State,Moisture,EC,Hot Air Temperature,Hot Air Humidity,"
+                "Timestamp,Batch ID,State,Moisture,Hot Air Temperature,Hot Air Humidity,"
                 "Chamber Temperature,Chamber Humidity,Heater,Fan,Elevator,Door,Fault Code\n");
     }
     return ESP_OK;
@@ -134,16 +134,28 @@ static bool parse_summary_line(const char *line, logger_summary_t *out)
     unsigned cooling = 0;
     unsigned discharge = 0;
     logger_summary_t row {};
-    const int n = sscanf(
+    /* Current format (no EC). Also accept legacy lines with a final_ec column. */
+    float legacy_ec = 0.0f;
+    int n = sscanf(
         line,
-        "%15[^,],%23[^,],%23[^,],%f,%f,%f,%f,%f,%f,%u,%u,%u,%15[^,],%39[^\r\n]",
+        "%15[^,],%23[^,],%23[^,],%f,%f,%f,%f,%f,%u,%u,%u,%15[^,],%39[^\r\n]",
         row.batch_id, row.start_time, row.end_time, &row.initial_moisture,
         &row.final_moisture, &row.target_moisture, &row.max_temperature,
-        &row.avg_temperature, &row.final_ec, &drying, &cooling, &discharge,
-        row.completion, row.fault);
-    if (n != 14) {
-        return false;
+        &row.avg_temperature, &drying, &cooling, &discharge, row.completion, row.fault);
+    if (n != 13) {
+        n = sscanf(
+            line,
+            "%15[^,],%23[^,],%23[^,],%f,%f,%f,%f,%f,%f,%u,%u,%u,%15[^,],%39[^\r\n]",
+            row.batch_id, row.start_time, row.end_time, &row.initial_moisture,
+            &row.final_moisture, &row.target_moisture, &row.max_temperature,
+            &row.avg_temperature, &legacy_ec, &drying, &cooling, &discharge,
+            row.completion, row.fault);
+        if (n != 14) {
+            (void)legacy_ec;
+            return false;
+        }
     }
+    (void)legacy_ec;
     row.drying_s = drying;
     row.cooling_s = cooling;
     row.discharge_s = discharge;
@@ -214,8 +226,8 @@ static void write_sample(const logger_sample_t *sample)
 
     const int wrote = fprintf(
         s_batch_file,
-        "%s,%s,%s,%.2f,%.3f,%.2f,%.2f,%.2f,%.2f,%u,%u,%u,%u,%s\n",
-        sample->timestamp, sample->batch_id, sample->state, sample->moisture, sample->ec,
+        "%s,%s,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%u,%u,%u,%u,%s\n",
+        sample->timestamp, sample->batch_id, sample->state, sample->moisture,
         sample->hot_air_temperature, sample->hot_air_humidity, sample->chamber_temperature,
         sample->chamber_humidity, (unsigned)sample->heater, (unsigned)sample->fan,
         (unsigned)sample->elevator, (unsigned)sample->door, sample->fault);
@@ -267,14 +279,13 @@ static void write_summary(const logger_summary_t *summary)
         "Cooling Duration: %u s\n"
         "Discharge Duration: %u s\n"
         "Total Batch Duration: %u s\n"
-        "Final EC: %.3f\n"
         "Completion Status: %s\n"
         "Fault Status: %s\n",
         summary->batch_id, summary->start_time, summary->end_time,
         summary->initial_moisture, summary->final_moisture, summary->target_moisture,
         summary->max_temperature, summary->avg_temperature, (unsigned)summary->drying_s,
         (unsigned)summary->cooling_s, (unsigned)summary->discharge_s, total,
-        summary->final_ec, summary->completion, summary->fault);
+        summary->completion, summary->fault);
     const bool txt_ok = wrote > 0 && fflush(txt) == 0;
     fclose(txt);
     if (!txt_ok) {
@@ -291,13 +302,13 @@ static void write_summary(const logger_summary_t *summary)
     if (fseek(index, 0, SEEK_END) == 0 && ftell(index) == 0) {
         fprintf(index,
                 "batch_id,start,end,initial_moisture,final_moisture,target_moisture,"
-                "max_temp,avg_temp,final_ec,drying_s,cooling_s,discharge_s,completion,fault\n");
+                "max_temp,avg_temp,drying_s,cooling_s,discharge_s,completion,fault\n");
     }
     const int index_wrote = fprintf(
-        index, "%s,%s,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.3f,%u,%u,%u,%s,%s\n",
+        index, "%s,%s,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%u,%u,%u,%s,%s\n",
         summary->batch_id, summary->start_time, summary->end_time, summary->initial_moisture,
         summary->final_moisture, summary->target_moisture, summary->max_temperature,
-        summary->avg_temperature, summary->final_ec, (unsigned)summary->drying_s,
+        summary->avg_temperature, (unsigned)summary->drying_s,
         (unsigned)summary->cooling_s, (unsigned)summary->discharge_s, summary->completion,
         summary->fault);
     const bool index_ok = index_wrote > 0 && fflush(index) == 0;
