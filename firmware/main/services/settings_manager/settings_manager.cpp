@@ -6,8 +6,8 @@
 
 static const char *TAG = "settings_mgr";
 static const char *NVS_NS = "dryer_set";
-/* Bump key when defaults change so old NVS blobs are not reused. */
-static const char *NVS_KEY = "cfg_v2";
+/* Bump when settings struct changes (hysteresis → PID). */
+static const char *NVS_KEY = "cfg_v3";
 
 static dryer_settings_t s_settings {};
 
@@ -19,10 +19,12 @@ void settings_manager_get_defaults(dryer_settings_t *out)
     *out = {};
     out->target_moisture_pct = 14.0f;
     out->drying_temperature_c = 50.0f;
-    out->temperature_hysteresis_c = 2.0f;
     out->cooling_temperature_c = 35.0f;
+    out->pid_kp = 4.0f;
+    out->pid_ki = 0.05f;
+    out->pid_kd = 8.0f;
+    out->pid_window_s = 20;
     out->circulation_mode = CIRCULATION_MODE_INTERVAL;
-    /* Production defaults (MASTERPLAN): interval 2 min, run 10 s. */
     out->circulation_interval_s = 120;
     out->circulation_run_time_s = 10;
     out->discharge_time_s = 60;
@@ -45,16 +47,21 @@ esp_err_t settings_manager_validate(const dryer_settings_t *in)
         ESP_LOGW(TAG, "reject: drying temperature out of safe limits");
         return ESP_ERR_INVALID_ARG;
     }
-    if (in->temperature_hysteresis_c <= 0.0f || in->temperature_hysteresis_c > 20.0f) {
-        ESP_LOGW(TAG, "reject: hysteresis invalid");
-        return ESP_ERR_INVALID_ARG;
-    }
     if (in->cooling_temperature_c < 10.0f || in->cooling_temperature_c > 60.0f) {
         ESP_LOGW(TAG, "reject: cooling temperature out of safe limits");
         return ESP_ERR_INVALID_ARG;
     }
     if (in->cooling_temperature_c >= in->drying_temperature_c) {
         ESP_LOGW(TAG, "reject: cooling >= drying");
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (in->pid_kp < 0.0f || in->pid_kp > 100.0f || in->pid_ki < 0.0f ||
+        in->pid_ki > 10.0f || in->pid_kd < 0.0f || in->pid_kd > 100.0f) {
+        ESP_LOGW(TAG, "reject: PID gains out of range");
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (in->pid_window_s < 10 || in->pid_window_s > 60) {
+        ESP_LOGW(TAG, "reject: PID window must be 10–60 s");
         return ESP_ERR_INVALID_ARG;
     }
     if (in->max_hot_air_temperature_c <= in->drying_temperature_c ||
@@ -115,12 +122,10 @@ esp_err_t settings_manager_load(void)
 
     s_settings = loaded;
     ESP_LOGI(TAG,
-             "Loaded settings moist=%.1f dry=%.1f cool=%.1f circ=%u/%us mode=%d",
+             "Loaded settings moist=%.1f dry=%.1f cool=%.1f pid=%.2f/%.3f/%.2f win=%us",
              s_settings.target_moisture_pct, s_settings.drying_temperature_c,
-             s_settings.cooling_temperature_c,
-             (unsigned)s_settings.circulation_run_time_s,
-             (unsigned)s_settings.circulation_interval_s,
-             (int)s_settings.circulation_mode);
+             s_settings.cooling_temperature_c, s_settings.pid_kp, s_settings.pid_ki,
+             s_settings.pid_kd, (unsigned)s_settings.pid_window_s);
     return ESP_OK;
 }
 

@@ -17,8 +17,13 @@ typedef enum {
 typedef struct {
     float target_moisture_pct;
     float drying_temperature_c;
-    float temperature_hysteresis_c;
     float cooling_temperature_c;
+
+    /** Chamber PID (1 Hz) → duty 0–100 for time-proportioned heater relay. */
+    float pid_kp;
+    float pid_ki;
+    float pid_kd;
+    uint32_t pid_window_s;
 
     circulation_mode_t circulation_mode;
     uint32_t circulation_interval_s;
@@ -28,7 +33,7 @@ typedef struct {
     uint32_t min_drying_time_s;
     uint32_t max_drying_time_s;
 
-    /** Hot-air over-temperature trip (MASTERPLAN: over-temp input is hot-air). */
+    /** Hot-air over-temperature trip and control cap. */
     float max_hot_air_temperature_c;
 } dryer_settings_t;
 

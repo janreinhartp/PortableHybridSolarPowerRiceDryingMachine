@@ -1,5 +1,7 @@
 #include "ui_theme.h"
 
+#include <cstring>
+
 #include "process_controller.h"
 
 static uint32_t s_last_click_ms = 0;
@@ -150,4 +152,17 @@ lv_obj_t *ui_theme_make_label(lv_obj_t *parent, const char *text, const lv_font_
     lv_obj_set_style_text_font(label, font != nullptr ? font : ui_font_body(), 0);
     lv_obj_set_style_text_color(label, ui_theme_color(hex), 0);
     return label;
+}
+
+void ui_label_set_text_if_changed(lv_obj_t *label, const char *text)
+{
+    if (label == nullptr) {
+        return;
+    }
+    const char *next = text != nullptr ? text : "";
+    const char *cur = lv_label_get_text(label);
+    if (cur != nullptr && strcmp(cur, next) == 0) {
+        return;
+    }
+    lv_label_set_text(label, next);
 }

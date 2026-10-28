@@ -64,3 +64,19 @@ esp_err_t th_sensor_get_address(uint8_t current_addr, uint16_t *out_addr)
     }
     return modbus_read_holding_regs(current_addr, TH_REG_DEVICE_ADDR, 1, out_addr);
 }
+
+esp_err_t th_sensor_set_baud(uint8_t slave_addr, uint16_t baud_code)
+{
+    if (slave_addr == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    ESP_LOGI(TAG, "XY-MD03 @%u baud reg 0x%04X ← %u", slave_addr, TH_REG_BAUD,
+             (unsigned)baud_code);
+    esp_err_t err = modbus_write_single_reg(slave_addr, TH_REG_BAUD, baud_code);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "set_baud failed: %s", esp_err_to_name(err));
+        return err;
+    }
+    ESP_LOGI(TAG, "Baud write OK — power-cycle probe, then use matching ESP baud");
+    return ESP_OK;
+}

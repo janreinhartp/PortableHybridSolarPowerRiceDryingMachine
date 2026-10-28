@@ -171,7 +171,7 @@ void manual_update(const system_status_t *status)
     const bool active[4] = {s_heater, s_fan, s_elev, status->relay_door_open};
     for (int i = 0; i < 4; ++i) {
         if (s_status_lbls[i] != nullptr) {
-            lv_label_set_text(s_status_lbls[i], texts[i]);
+            ui_label_set_text_if_changed(s_status_lbls[i], texts[i]);
             lv_obj_set_style_text_color(
                 s_status_lbls[i], ui_theme_color(active[i] ? UI_COLOR_TEAL : UI_COLOR_DIM), 0);
         }
@@ -185,9 +185,9 @@ void manual_update(const system_status_t *status)
         s_banner != nullptr ? (lv_obj_t *)lv_obj_get_user_data(s_banner) : nullptr;
     const bool allowed = process_controller_manual_control_allowed();
     if (banner_lbl != nullptr) {
-        lv_label_set_text(banner_lbl,
-                          allowed ? "Manual Available. Safety Interlock Permits Commands."
-                                  : "Locked While A Batch Is Active.");
+        ui_label_set_text_if_changed(
+            banner_lbl, allowed ? "Manual Available. Safety Interlock Permits Commands."
+                                : "Locked While A Batch Is Active.");
         lv_obj_set_style_text_color(banner_lbl,
                                     ui_theme_color(allowed ? UI_COLOR_TEAL : UI_COLOR_AMBER), 0);
     }

@@ -36,7 +36,6 @@ typedef struct {
     float initial_moisture;
     float initial_chamber_temp_c;
     float final_moisture;
-    float final_ec;
     float final_chamber_temp_c;
     float max_chamber_temp_c;
     float avg_chamber_temp_c;
@@ -46,6 +45,10 @@ typedef struct {
     batch_process_state_t interrupted_state;
     float interrupted_moisture;
     float interrupted_chamber_temp_c;
+    uint32_t interrupted_drying_elapsed_s;
+    uint32_t interrupted_cooling_elapsed_s;
+    uint32_t interrupted_discharge_elapsed_s;
+    uint8_t interrupted_discharge_step;
 } batch_status_t;
 
 esp_err_t batch_manager_init(void);
@@ -58,9 +61,15 @@ void batch_manager_get_status(batch_status_t *out);
 
 /**
  * Allocate next BATCH-NNNN, record start sensors, clear completed flag.
- * Refuses if interrupted_pending (operator must ACK first).
+ * Refuses if interrupted_pending (operator must Resume or Discard first).
  */
 esp_err_t batch_manager_create(const sensor_data_t *sensors);
+
+/**
+ * Rehydrate the interrupted batch as the active run (same batch_id, no new seq).
+ * Clears interrupted_pending. Caller restores process_controller timers/state.
+ */
+esp_err_t batch_manager_resume_from_interrupted(const sensor_data_t *sensors);
 
 void batch_manager_set_state(batch_process_state_t state);
 void batch_manager_update_elapsed(uint32_t drying_s, uint32_t cooling_s, uint32_t discharge_s);
@@ -69,7 +78,11 @@ void batch_manager_note_chamber_temp(float chamber_temp_c);
 /** Persist interrupted recovery record (call on major transitions / each tick in active states). */
 esp_err_t batch_manager_save_recovery(batch_process_state_t state,
                                       float moisture,
-                                      float chamber_temp_c);
+                                      float chamber_temp_c,
+                                      uint32_t drying_elapsed_s,
+                                      uint32_t cooling_elapsed_s,
+                                      uint32_t discharge_elapsed_s,
+                                      uint8_t discharge_step);
 
 /** Finalize summary, clear NVS interrupted flag. */
 esp_err_t batch_manager_complete(const sensor_data_t *sensors);

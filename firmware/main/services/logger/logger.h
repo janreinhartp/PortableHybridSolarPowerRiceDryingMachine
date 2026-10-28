@@ -18,7 +18,6 @@ typedef struct {
     char state[16];
     char fault[40];
     float moisture;
-    float ec;
     float hot_air_temperature;
     float hot_air_humidity;
     float chamber_temperature;
@@ -40,7 +39,6 @@ typedef struct {
     float target_moisture;
     float max_temperature;
     float avg_temperature;
-    float final_ec;
     uint32_t drying_s;
     uint32_t cooling_s;
     uint32_t discharge_s;

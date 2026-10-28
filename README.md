@@ -2,7 +2,7 @@
 
 A 10 kg/batch automated rice drying system designed for controlled drying, rice circulation, cooling, and discharge.
 
-The system uses an **ESP32-S3** as the main controller with a touchscreen HMI, temperature and humidity sensors, analog moisture/EC sensing, RS485 Modbus communication, SD card data logging, and local Wi-Fi monitoring.
+The system uses an **ESP32-S3** as the main controller with a touchscreen HMI, temperature and humidity sensors, analog moisture sensing, RS485 Modbus communication, SD card data logging, and local Wi-Fi monitoring.
 
 The dryer is designed to operate **offline** and does not require cloud services or an internet connection.
 
@@ -72,7 +72,7 @@ During DRYING:
 
 ```text
 Fan      = ON
-Heater   = Hysteresis Controlled
+Heater   = Chamber PID + hot-air cap (time-proportioned relay)
 Elevator = Continuous OR Interval
 Door     = CLOSED
 ```
@@ -257,9 +257,9 @@ Two waterproof RS485 Modbus temperature/humidity probes:
 - Hot-air/heater area
 - Drying chamber
 
-### Moisture and EC
+### Moisture
 
-A 0-5 V analog sensor is used for moisture and EC measurement.
+A 0–5 V analog sensor is used for rice moisture (ADS1115). EC is not used.
 
 An ADS1115 16-bit I2C ADC reads that sensor. The 0-5 V signal must not connect to an ESP32 GPIO.
 
@@ -500,7 +500,7 @@ Required hardware safety includes:
 
 # 15. Heater Control
 
-Initial heater control uses hysteresis.
+Heater control uses a chamber-temperature PID that sets a duty cycle, applied as time-proportioned ON/OFF on the Modbus relay (≈20 s window). The hot-air sensor hard-caps the heater at `max_hot_air_temperature_c` (also F001 trip).
 
 Example:
 
@@ -536,32 +536,37 @@ Safety temperature limits always override normal heater control.
 
 # 16. HMI
 
-The touchscreen interface will include:
+The touchscreen is the primary control interface. The SCADA HMI is implemented in `firmware/main/ui/` per [`docs/08-hmi-design-guideline.md`](docs/08-hmi-design-guideline.md).
+
+Operator path (bottom nav):
 
 ```text
-Dashboard
+Home (Dashboard)
 Batch Setup
-Drying
-Cooling
-Discharge
-Manual Control
-History
-Settings
+Run          (Drying / Cooling / Discharging — one screen, restyled by state)
+Complete
 Alarms
-System Information
 ```
 
-The touchscreen is the primary control interface.
+Technician path (More menu):
+
+```text
+Manual Control
+Settings
+History
+System Info
+Commission Sensors
+```
+
+There is no Power / Solar / Battery UI — those signals are off-board.
 
 ---
 
 # 17. Local Web Dashboard
 
-The ESP32 provides a local web dashboard through Wi-Fi.
+The ESP32 SoftAP read-only web dashboard is implemented in `firmware/main/services/web_server/`.
 
-Initial implementation is read-only.
-
-The dashboard displays:
+Join the SoftAP and open `http://192.168.4.1`. The dashboard displays:
 
 - Current process state
 - Sensor values
@@ -583,7 +588,7 @@ GET /api/history
 GET /api/faults
 ```
 
-The web interface does not directly control actuators in the initial implementation.
+No web endpoint can move an actuator (GET-only; POST/PUT/DELETE rejected).
 
 ---
 
@@ -835,19 +840,21 @@ Important measurements:
 
 # 25. Documentation
 
-The project documentation is divided into six design documents plus the master plan.
+The project documentation is the master plan, six design documents, and two HMI docs.
 
 | Document | Purpose |
 |---|---|
-| `docs/MASTERPLAN.md` | Implementation roadmap and locked build decisions |
+| `docs/MASTERPLAN.md` | Implementation roadmap and locked build decisions (status source) |
 | `01-product-requirements.md` | Product scope and functional requirements |
 | `02-technical-requirements.md` | Technical and software requirements |
 | `03-system-architecture.md` | Complete system architecture |
 | `04-hardware-design.md` | Hardware and electrical design |
 | `05-software-design.md` | Firmware and software architecture |
 | `06-implementation-plan.md` | Development and testing plan |
+| `07-hmi-ux-notes.md` | Historical Phase 7 UX debt (pre-redesign baseline) |
+| `08-hmi-design-guideline.md` | Active SCADA HMI design guideline (implemented) |
 
-Start implementation from [`docs/MASTERPLAN.md`](docs/MASTERPLAN.md).
+Start from [`docs/MASTERPLAN.md`](docs/MASTERPLAN.md).
 
 ---
 
@@ -881,8 +888,16 @@ README.md
    |       +-- Firmware architecture
    |
    +-- 06 Implementation Plan
+   |       |
+   |       +-- Detailed phase checklist
+   |
+   +-- 07 HMI UX Notes
+   |       |
+   |       +-- Historical Phase 7 baseline UX debt
+   |
+   +-- 08 HMI Design Guideline
            |
-           +-- Detailed phase checklist
+           +-- Active SCADA HMI (implemented)
 ```
 
 ---
@@ -926,7 +941,7 @@ The following decisions are considered part of the baseline design.
 - There is no automatic loading stage.
 - The elevator is used for internal circulation and discharge.
 - DRYING uses continuous fan operation.
-- Heater uses initial hysteresis control.
+- Heater uses chamber PID with hot-air temperature cap.
 - Rice circulation supports continuous and interval modes.
 - Circulation interval and run time are configurable.
 - Moisture determines drying completion.
@@ -1166,9 +1181,11 @@ PortableHybridSolarPowerRiceDryingMachine/
 │   ├── 04-hardware-design.md
 │   ├── 05-software-design.md
 │   ├── 06-implementation-plan.md
+│   ├── 07-hmi-ux-notes.md
+│   ├── 08-hmi-design-guideline.md
 │   └── ESP32-S3-Touch-LCD-7B-Demo/
 │
-├── firmware/          ESP-IDF project (Phases 0–4)
+├── firmware/          ESP-IDF project (Phases 0–8 in tree)
 │   ├── CMakeLists.txt
 │   ├── components/
 │   └── main/
@@ -1181,7 +1198,7 @@ PortableHybridSolarPowerRiceDryingMachine/
 │
 ├── data/
 │   ├── calibration/
-│   └── test-results/
+│   └── test-results/  phase9-validation-checklist.md
 │
 └── tests/
     ├── unit/

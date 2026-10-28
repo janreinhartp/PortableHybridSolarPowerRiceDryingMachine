@@ -50,6 +50,9 @@ lv_obj_t *ui_theme_make_btn(lv_obj_t *parent, const char *text, lv_event_cb_t cb
 lv_obj_t *ui_theme_make_label(lv_obj_t *parent, const char *text, const lv_font_t *font,
                               uint32_t hex);
 
+/** Skip LVGL invalidate when the label text is already identical. */
+void ui_label_set_text_if_changed(lv_obj_t *label, const char *text);
+
 #ifdef __cplusplus
 }
 #endif

@@ -1,5 +1,7 @@
 # 02 - Technical Requirements
 
+**Status:** Normative requirements. Implementation status: see [`MASTERPLAN.md`](MASTERPLAN.md).
+
 ## 1. Purpose
 
 This document defines the technical requirements for the 10 kg/batch Solar Hybrid Rice Dryer.

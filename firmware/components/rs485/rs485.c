@@ -16,6 +16,8 @@
 #define RS485_BAUD       9600
 #define RS485_RX_BUF     512
 #define RS485_TX_BUF     256
+/* Modbus RTU inter-frame gap ≈ 3.5 character times at 9600. */
+#define RS485_IFG_MS     4
 
 static const char *TAG = "rs485";
 static SemaphoreHandle_t s_bus_mutex;
@@ -82,13 +84,12 @@ esp_err_t rs485_transceive(const uint8_t *tx, size_t tx_len,
 
     *rx_len = 0;
     uart_flush_input(RS485_UART_NUM);
-    /* Modbus RTU inter-frame gap (~3.5 chars @ 9600 ≈ 4 ms). */
-    vTaskDelay(pdMS_TO_TICKS(4));
+    vTaskDelay(pdMS_TO_TICKS(RS485_IFG_MS));
 
     int written = uart_write_bytes(RS485_UART_NUM, tx, tx_len);
     uart_wait_tx_done(RS485_UART_NUM, pdMS_TO_TICKS(100));
     /* Allow onboard auto-DE transceiver turnaround before listening. */
-    vTaskDelay(pdMS_TO_TICKS(4));
+    vTaskDelay(pdMS_TO_TICKS(RS485_IFG_MS));
 
     if (written != (int)tx_len) {
         xSemaphoreGive(s_bus_mutex);

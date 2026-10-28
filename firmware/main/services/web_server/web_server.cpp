@@ -86,7 +86,7 @@ async function refresh(){
     document.getElementById('sensors').innerHTML=rows({
       'Hot air °C':se.hot_air_temperature, 'Hot air RH %':se.hot_air_humidity,
       'Chamber °C':se.chamber_temperature,'Chamber RH %':se.chamber_humidity,
-      'Moisture %':se.moisture,EC:se.ec,
+      'Moisture %':se.moisture,
       'Hot air OK':okBad(se.hot_air_ok,se.hot_air_ok),
       'Chamber OK':okBad(se.chamber_ok,se.chamber_ok),
       'Moisture OK':okBad(se.moisture_ok,se.moisture_ok)});
@@ -100,7 +100,9 @@ async function refresh(){
       'Discharge s':ba.discharge_s,Started:ba.started||'—',Ended:ba.ended||'—'});
     document.getElementById('settings').innerHTML=rows({
       'Target moisture %':set.target_moisture,'Drying °C':set.drying_temperature,
-      'Hysteresis °C':set.temperature_hysteresis,'Cooling °C':set.cooling_temperature,
+      'Cooling °C':set.cooling_temperature,'PID Kp':set.pid_kp,'PID Ki':set.pid_ki,
+      'PID Kd':set.pid_kd,'PID window s':set.pid_window_s,
+      'Max hot air °C':set.max_hot_air_temperature,
       Circulation:set.circulation_mode,'Interval s':set.circulation_interval_s,
       'Run s':set.circulation_run_time_s,'Discharge s':set.discharge_time_s});
     const alarms=(fa.alarms||[]);
@@ -187,16 +189,15 @@ static esp_err_t handle_api_sensors(httpd_req_t *req)
     snprintf(buf, sizeof(buf),
              "{\"hot_air_temperature\":%.2f,\"hot_air_humidity\":%.2f,"
              "\"chamber_temperature\":%.2f,\"chamber_humidity\":%.2f,"
-             "\"moisture\":%.2f,\"ec\":%.2f,"
+             "\"moisture\":%.2f,"
              "\"hot_air_ok\":%s,\"chamber_ok\":%s,\"moisture_ok\":%s,"
-             "\"ec_ok\":%s,\"ads1115_ok\":%s}",
+             "\"ads1115_ok\":%s}",
              (double)st->hotair_temp_c, (double)st->hotair_rh,
              (double)st->chamber_temp_c, (double)st->chamber_rh,
-             (double)st->moisture_pct, (double)st->ec_value,
+             (double)st->moisture_pct,
              st->hotair_ok ? "true" : "false",
              st->chamber_ok ? "true" : "false",
              st->moisture_ok ? "true" : "false",
-             st->ec_ok ? "true" : "false",
              st->ads1115_ok ? "true" : "false");
     return send_json(req, buf);
 }
@@ -250,13 +251,15 @@ static esp_err_t handle_api_settings(httpd_req_t *req)
     char buf[512];
     snprintf(buf, sizeof(buf),
              "{\"target_moisture\":%.2f,\"drying_temperature\":%.2f,"
-             "\"temperature_hysteresis\":%.2f,\"cooling_temperature\":%.2f,"
+             "\"cooling_temperature\":%.2f,\"pid_kp\":%.2f,\"pid_ki\":%.3f,"
+             "\"pid_kd\":%.2f,\"pid_window_s\":%u,"
              "\"circulation_mode\":\"%s\",\"circulation_interval_s\":%u,"
              "\"circulation_run_time_s\":%u,\"discharge_time_s\":%u,"
              "\"min_drying_time_s\":%u,\"max_drying_time_s\":%u,"
              "\"max_hot_air_temperature\":%.2f}",
              (double)cfg.target_moisture_pct, (double)cfg.drying_temperature_c,
-             (double)cfg.temperature_hysteresis_c, (double)cfg.cooling_temperature_c,
+             (double)cfg.cooling_temperature_c, (double)cfg.pid_kp, (double)cfg.pid_ki,
+             (double)cfg.pid_kd, (unsigned)cfg.pid_window_s,
              cfg.circulation_mode == CIRCULATION_MODE_CONTINUOUS ? "continuous"
                                                                  : "interval",
              (unsigned)cfg.circulation_interval_s,

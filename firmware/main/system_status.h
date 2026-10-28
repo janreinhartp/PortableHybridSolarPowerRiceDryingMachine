@@ -34,11 +34,8 @@ typedef struct {
     float chamber_temp_c;
     float chamber_rh;
     float moisture_pct;
-    float ec_value;
     float moisture_voltage;
-    float ec_voltage;
     bool moisture_ok;
-    bool ec_ok;
     bool relay_elevator;
     bool relay_heater;
     bool relay_fan;
@@ -58,6 +55,7 @@ typedef struct {
     uint8_t dryer_state; /* dryer_state_t */
     char batch_id[16];
     bool batch_interrupted;
+    uint8_t interrupted_state; /* dryer_state_t when batch_interrupted */
     uint32_t drying_elapsed_s;
     uint32_t cooling_elapsed_s;
     uint32_t discharge_elapsed_s;
@@ -66,7 +64,10 @@ typedef struct {
     float cooling_temperature_c;
 
     /* Phase 7 — settings snapshot, batch result, logger, and alarm context */
-    float temperature_hysteresis_c;
+    float pid_kp;
+    float pid_ki;
+    float pid_kd;
+    uint32_t pid_window_s;
     uint32_t circulation_interval_s;
     uint32_t circulation_run_time_s;
     uint32_t discharge_time_s;
@@ -80,9 +81,9 @@ typedef struct {
     uint32_t logger_dropped;
     float initial_moisture_pct;
     float final_moisture_pct;
-    float final_ec;
     float max_chamber_temp_c;
     float avg_chamber_temp_c;
+    float heater_duty_pct; /* 0–100 during DRYING */
     char batch_started[24];
     char batch_ended[24];
     char fault_time[24];

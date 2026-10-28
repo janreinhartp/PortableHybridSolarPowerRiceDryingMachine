@@ -51,11 +51,15 @@ Home → Batch Setup → Run (Drying / Cooling / Discharging) → Complete
 | COMPLETE | Complete |
 | FAULT | Alarms |
 
-Sticky (no auto-leave): Manual, Settings, History, System, More, Commission.
+Sticky (no auto-leave): Manual, Settings, History, System, More, Commission, Calibrate Moisture.
 
 Legacy separate Drying / Cooling / Discharge screens are no longer in the build; Run replaces them.
 
-No Power / Solar / Battery UI — those signals are not implemented in firmware.
+**Boot splash** (full-screen, not in nav): shows Display / SD / RTC / Moisture / Core / Logger / RS485 / Relay / Wi-Fi bring-up, then auto-advances to Home.
+
+Technician: More → System → **Calibrate Moisture** (3-point piecewise) and **Commission Sensors**.
+
+No Power / Solar / Battery UI — those signals are not implemented in firmware. No EC UI (EC removed).
 
 ---
 
@@ -163,10 +167,12 @@ Heater, Fan, Elevator, Door — LED + status text (`ON` / `OFF` / `RUNNING` / `O
 
 ## 7. Screen content (implemented)
 
-### Home
+### Home (code: `dashboard/`)
+
+Operator label **Home**; screen folder is `firmware/main/ui/screens/dashboard/`.
 
 - Four metric cards: rice moisture, hot-air temp, chamber temp, chamber humidity
-- EC card + four actuator status cards
+- Actuator status row (heater / fan / elevator / door)
 - Status note + **Start Batch** (320×64); **Acknowledge Interrupt** when needed
 
 ### Batch Setup
@@ -174,7 +180,9 @@ Heater, Fan, Elevator, Door — LED + status text (`ON` / `OFF` / `RUNNING` / `O
 - 2-column settings snapshot cards + readiness checklist
 - **Edit Settings** / **Start**; **Acknowledge Interrupt** when needed
 
-### Run
+### Run (code: `run/`)
+
+One screen for DRYING / COOLING / DISCHARGING; restyled by process state.
 
 - Stacked horizontal bar gauges + dual trend chart
 - Horizontal actuator status row
@@ -190,14 +198,15 @@ Heater, Fan, Elevator, Door — LED + status text (`ON` / `OFF` / `RUNNING` / `O
 - Split layout: active fault card + **Acknowledge Fault** (left); Recent Alarms list (right)
 - Fault strip under header while a fault is active
 
-### More → Manual / Settings / History / System / Commission
+### More → Manual / Settings / History / System / Commission / Calibrate
 
 - More: 2×2 menu tiles
 - Manual: per-actuator rows with On/Off (or Open/Close)
-- Settings: 3-column editable parameter grid
+- Settings: editable grid including PID gains, window, max hot-air (no hysteresis)
 - History: scrollable batch rows
-- System: status tiles + **Commission Sensors**
+- System: status tiles + **Commission Sensors** + **Calibrate Moisture**
 - Commission: live sensor rows + address assign actions
+- Calibrate Moisture: 3-point voltage capture + reference %; IDLE/COMPLETE only
 
 ---
 

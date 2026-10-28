@@ -17,9 +17,9 @@ Operator feedback at the time: the UI was **not user-friendly**. A major visual 
 
 ---
 
-## 2. What Exists Today (baseline)
+## 2. What Existed Then (pre-redesign baseline)
 
-Screens implemented:
+Screens in the Phase 7 baseline (before the 08 SCADA redesign):
 
 ```text
 Dashboard
@@ -31,6 +31,8 @@ History
 Alarms
 System Info
 ```
+
+Current (post-redesign) screen map: see [08-hmi-design-guideline.md](08-hmi-design-guideline.md) — unified **Run** screen replaces separate Drying / Cooling / Discharge.
 
 Behavior that must be preserved in any redesign:
 
@@ -78,40 +80,27 @@ These are observations from the Phase 7 baseline, not a final design.
 
 ---
 
-## 4. Design Guideline — Placeholder
+## 4. Design Guideline — Superseded by 08
 
-When HMI work resumes, create:
+The guideline exists and is implemented:
 
 ```text
-docs/08-hmi-design-guideline.md   (name may change)
+docs/08-hmi-design-guideline.md
 ```
 
-That document should define at least:
-
-1. **Audience split** — daily operator vs technician/commissioning
-2. **Screen map** — primary path for one batch (Idle → Setup → Run → Complete)
-3. **Information hierarchy** — what is large/always visible vs secondary
-4. **Touch targets** — minimum sizes, spacing, contrast for the 7" panel
-5. **Typography and color** — state colors, fault urgency, disabled states
-6. **Navigation model** — fewer top-level tabs; how Manual/Settings are reached
-7. **Copy rules** — short verbs, confirmations, fault messaging
-8. **Non-negotiables** from firmware architecture (command path, safety authority, lock rules)
-
-Until that guideline exists, treat any HMI PR that is primarily visual as out of scope.
+It defines audience split, screen map, information hierarchy, touch targets, typography/color, navigation, copy rules, and architecture non-negotiables. Treat [08-hmi-design-guideline.md](08-hmi-design-guideline.md) as the active HMI source of truth; this file is historical context only.
 
 ---
 
-## 5. Acceptance for a Future Redesign
+## 5. Redesign Acceptance (pre-redesign goals)
 
-A redesign is done when operators can, without coaching:
+These were the redesign goals from the Phase 7 baseline. They are **complete in firmware** per [08-hmi-design-guideline.md](08-hmi-design-guideline.md). Hardware glanceability / logging soak remains open in MASTERPLAN Phase 7 and Phase 9.
 
 ```text
-[ ] Start a batch from a clear primary action
-[ ] Read moisture, temperature, and state at a glance during DRYING
-[ ] Understand the next step during COOLING and DISCHARGING
-[ ] Find and acknowledge a fault without hunting
-[ ] Keep Manual / sensor commissioning out of the normal batch path
-[ ] Use large enough controls for field touch
+[x] Start a batch from a clear primary action
+[x] Read moisture, temperature, and state at a glance during DRYING
+[x] Understand the next step during COOLING and DISCHARGING
+[x] Find and acknowledge a fault without hunting
+[x] Keep Manual / sensor commissioning out of the normal batch path
+[x] Use large enough controls for field touch
 ```
-
-Functional Phase 7 acceptance (logging + responsiveness) remains separate in MASTERPLAN Phase 7.

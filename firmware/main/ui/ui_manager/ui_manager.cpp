@@ -4,6 +4,8 @@
 
 #include "alarms_screen.h"
 #include "batch_setup_screen.h"
+#include "calibrate_moisture_screen.h"
+#include "set_clock_screen.h"
 #include "commission_screen.h"
 #include "complete_screen.h"
 #include "dashboard_screen.h"
@@ -42,6 +44,8 @@ static unsigned *s_tap_counter = nullptr;
 static char s_ephemeral[120] = {};
 static bool s_ephemeral_active = false;
 static uint8_t s_ephemeral_state = 0xFF;
+static bool s_layout_fault_known = false;
+static bool s_layout_fault_visible = false;
 
 static const char *phase_text_for(const system_status_t *status)
 {
@@ -77,14 +81,14 @@ static void refresh_header_phase(const system_status_t *status)
     }
     if (s_ephemeral_active) {
         if (status->dryer_state == s_ephemeral_state && s_ephemeral[0] != '\0') {
-            lv_label_set_text(s_phase, s_ephemeral);
+            ui_label_set_text_if_changed(s_phase, s_ephemeral);
             lv_obj_set_style_text_color(s_phase, ui_theme_color(UI_COLOR_AMBER), 0);
             return;
         }
         s_ephemeral_active = false;
         s_ephemeral[0] = '\0';
     }
-    lv_label_set_text(s_phase, phase_text_for(status));
+    ui_label_set_text_if_changed(s_phase, phase_text_for(status));
     lv_obj_set_style_text_color(s_phase, ui_theme_color(UI_COLOR_MUTED), 0);
 }
 
@@ -93,6 +97,11 @@ static void layout_content(bool fault_visible)
     if (s_content == nullptr) {
         return;
     }
+    if (s_layout_fault_known && s_layout_fault_visible == fault_visible) {
+        return;
+    }
+    s_layout_fault_known = true;
+    s_layout_fault_visible = fault_visible;
     if (fault_visible) {
         if (s_fault_strip != nullptr) {
             lv_obj_clear_flag(s_fault_strip, LV_OBJ_FLAG_HIDDEN);
@@ -136,6 +145,8 @@ static bool screen_follows_process(ui_screen_t screen)
     case UI_SCREEN_SYSTEM:
     case UI_SCREEN_MORE:
     case UI_SCREEN_COMMISSION:
+    case UI_SCREEN_CALIBRATE_MOISTURE:
+    case UI_SCREEN_SET_CLOCK:
         return false;
     default:
         return true;
@@ -155,6 +166,8 @@ static void detach_all(void)
     system_info_detach();
     more_detach();
     commission_detach();
+    calibrate_moisture_detach();
+    set_clock_detach();
 }
 
 static void highlight_nav(void)
@@ -172,7 +185,8 @@ static void highlight_nav(void)
         } else if (mapped[i] == UI_SCREEN_MORE) {
             on = (s_screen == UI_SCREEN_MORE || s_screen == UI_SCREEN_MANUAL ||
                   s_screen == UI_SCREEN_SETTINGS || s_screen == UI_SCREEN_HISTORY ||
-                  s_screen == UI_SCREEN_SYSTEM || s_screen == UI_SCREEN_COMMISSION);
+                  s_screen == UI_SCREEN_SYSTEM || s_screen == UI_SCREEN_COMMISSION ||
+                  s_screen == UI_SCREEN_CALIBRATE_MOISTURE || s_screen == UI_SCREEN_SET_CLOCK);
         } else {
             on = (s_screen == mapped[i]);
         }
@@ -221,6 +235,12 @@ static void update_active(void)
     case UI_SCREEN_COMMISSION:
         commission_update(&s_status);
         break;
+    case UI_SCREEN_CALIBRATE_MOISTURE:
+        calibrate_moisture_update(&s_status);
+        break;
+    case UI_SCREEN_SET_CLOCK:
+        set_clock_update(&s_status);
+        break;
     }
 }
 
@@ -267,6 +287,12 @@ void ui_manager_navigate(ui_screen_t screen)
         break;
     case UI_SCREEN_COMMISSION:
         commission_build(s_content, &s_status);
+        break;
+    case UI_SCREEN_CALIBRATE_MOISTURE:
+        calibrate_moisture_build(s_content, &s_status);
+        break;
+    case UI_SCREEN_SET_CLOCK:
+        set_clock_build(s_content, &s_status);
         break;
     }
 }
@@ -315,6 +341,7 @@ void ui_manager_show_hmi(const system_status_t *status)
         trend_buffer_push(&s_status);
     }
     s_seen_state = s_status.dryer_state;
+    s_layout_fault_known = false;
     s_taps = s_tap_counter != nullptr ? *s_tap_counter : 0;
 
     lv_obj_t *scr = lv_scr_act();
@@ -450,7 +477,7 @@ void ui_manager_update_runtime(const system_status_t *status, unsigned touch_tap
     if (s_batch != nullptr) {
         char buf[48];
         snprintf(buf, sizeof(buf), "%s", status->batch_id[0] ? status->batch_id : "BATCH-");
-        lv_label_set_text(s_batch, buf);
+        ui_label_set_text_if_changed(s_batch, buf);
     }
     refresh_header_phase(status);
     if (status->rtc_ok) {
@@ -459,21 +486,17 @@ void ui_manager_update_runtime(const system_status_t *status, unsigned touch_tap
         ui_format_header_date(date, sizeof(date), status->rtc_year, status->rtc_month,
                               status->rtc_day);
         ui_format_header_time(time, sizeof(time), status->rtc_hour, status->rtc_minute);
-        if (s_clock_date != nullptr) {
-            lv_label_set_text(s_clock_date, date);
-        }
-        if (s_clock_time != nullptr) {
-            lv_label_set_text(s_clock_time, time);
-        }
+        ui_label_set_text_if_changed(s_clock_date, date);
+        ui_label_set_text_if_changed(s_clock_time, time);
     }
 
     const bool fault_on = status->active_fault != 0;
     if (s_fault_text != nullptr) {
         if (fault_on) {
-            lv_label_set_text(s_fault_text,
-                              safety_manager_fault_name((fault_code_t)status->active_fault));
+            ui_label_set_text_if_changed(
+                s_fault_text, safety_manager_fault_name((fault_code_t)status->active_fault));
         } else {
-            lv_label_set_text(s_fault_text, "");
+            ui_label_set_text_if_changed(s_fault_text, "");
         }
     }
     layout_content(fault_on);

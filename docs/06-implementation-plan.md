@@ -1,12 +1,14 @@
 # 06 Implementation Plan
 
+**Status:** Detailed checklist. Live phase status: see [`MASTERPLAN.md`](MASTERPLAN.md) (Phases 0–8 in tree; Phase 9 next).
+
 ## 1. Purpose
 
 This document defines the implementation plan for the 10 kg/batch Hybrid Solar Power Rice Dryer.
 
 The implementation will follow an incremental approach.
 
-Execution order and locked decisions live in [`MASTERPLAN.md`](MASTERPLAN.md). That plan is the status source. As of the Phase 6 firmware landing:
+Execution order and locked decisions live in [`MASTERPLAN.md`](MASTERPLAN.md). That plan is the status source. As of Phases 0–8 firmware in tree:
 
 | Master-plan phase | State |
 |---|---|
@@ -17,9 +19,11 @@ Execution order and locked decisions live in [`MASTERPLAN.md`](MASTERPLAN.md). T
 | 4 ADS1115, sensors, actuators | Complete (firmware + moisture/EC bench) |
 | 5 Safety, settings, circulation | In the tree |
 | 6 Process and batch | In the tree |
-| 7 Logging and HMI | **Next** |
+| 7 Logging and HMI | In the tree (SCADA per [`08-hmi-design-guideline.md`](08-hmi-design-guideline.md)) |
+| 8 Local web dashboard | In the tree (SoftAP read-only) |
+| 9 Validation | **Next** — [`data/test-results/phase9-validation-checklist.md`](../data/test-results/phase9-validation-checklist.md) |
 
-The numbered phases below are the detailed checklist. They use a finer split than the master plan (this document's "Phase 3" Sensor Manager and "Phase 4" Actuator Manager map to master-plan Phase 4). Do not treat an unchecked box here as a reason to redo Phases 0–4 firmware.
+The numbered phases below are the detailed checklist. They use a finer split than the master plan (this document's "Phase 3" Sensor Manager and "Phase 4" Actuator Manager map to master-plan Phase 4). Unchecked boxes in the long checklist below do **not** mean redo Phases 0–8 firmware — use MASTERPLAN and the Phase 9 checklist for remaining work.
 
 Each subsystem will be developed and tested independently before full system integration.
 
