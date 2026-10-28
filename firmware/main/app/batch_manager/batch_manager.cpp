@@ -13,12 +13,30 @@ static const char *NVS_NS = "batch_mgr";
 static const char *NVS_KEY_SEQ = "seq";
 static const char *NVS_KEY_RECOVERY = "recovery";
 
+#define RECOVERY_MAGIC_LEGACY 0xB6
+#define RECOVERY_MAGIC_V1     0xB7
+#define RECOVERY_VERSION_1    1
+
 typedef struct {
     uint8_t magic; /* 0xB6 */
     uint8_t state;
     char batch_id[16];
     float moisture;
     float chamber_temp_c;
+    uint32_t saved_at_s;
+} batch_recovery_blob_legacy_t;
+
+typedef struct {
+    uint8_t magic;   /* 0xB7 */
+    uint8_t version; /* 1 */
+    uint8_t state;
+    uint8_t discharge_step;
+    char batch_id[16];
+    float moisture;
+    float chamber_temp_c;
+    uint32_t drying_elapsed_s;
+    uint32_t cooling_elapsed_s;
+    uint32_t discharge_elapsed_s;
     uint32_t saved_at_s;
 } batch_recovery_blob_t;
 
@@ -76,6 +94,19 @@ static esp_err_t nvs_clear_recovery(void)
     return err;
 }
 
+static void clear_interrupted_fields(void)
+{
+    s_status.interrupted_pending = false;
+    memset(s_status.interrupted_batch_id, 0, sizeof(s_status.interrupted_batch_id));
+    s_status.interrupted_state = BATCH_STATE_IDLE;
+    s_status.interrupted_moisture = 0.0f;
+    s_status.interrupted_chamber_temp_c = 0.0f;
+    s_status.interrupted_drying_elapsed_s = 0;
+    s_status.interrupted_cooling_elapsed_s = 0;
+    s_status.interrupted_discharge_elapsed_s = 0;
+    s_status.interrupted_discharge_step = 0;
+}
+
 esp_err_t batch_manager_init(void)
 {
     s_status = {};
@@ -85,36 +116,68 @@ esp_err_t batch_manager_init(void)
 
 esp_err_t batch_manager_load_recovery(void)
 {
+    clear_interrupted_fields();
+
     nvs_handle_t h;
     esp_err_t err = nvs_open(NVS_NS, NVS_READONLY, &h);
     if (err == ESP_ERR_NVS_NOT_FOUND) {
-        s_status.interrupted_pending = false;
         return ESP_OK;
     }
     if (err != ESP_OK) {
         return err;
     }
 
-    batch_recovery_blob_t blob {};
-    size_t sz = sizeof(blob);
-    err = nvs_get_blob(h, NVS_KEY_RECOVERY, &blob, &sz);
+    uint8_t raw[64] = {};
+    size_t sz = sizeof(raw);
+    err = nvs_get_blob(h, NVS_KEY_RECOVERY, raw, &sz);
     nvs_close(h);
-
-    if (err != ESP_OK || sz != sizeof(blob) || blob.magic != 0xB6) {
-        s_status.interrupted_pending = false;
+    if (err != ESP_OK || sz < 1) {
         return ESP_OK;
     }
 
-    s_status.interrupted_pending = true;
-    strncpy(s_status.interrupted_batch_id, blob.batch_id,
-            sizeof(s_status.interrupted_batch_id) - 1);
-    s_status.interrupted_state = (batch_process_state_t)blob.state;
-    s_status.interrupted_moisture = blob.moisture;
-    s_status.interrupted_chamber_temp_c = blob.chamber_temp_c;
+    if (raw[0] == RECOVERY_MAGIC_V1 && sz == sizeof(batch_recovery_blob_t)) {
+        batch_recovery_blob_t blob {};
+        memcpy(&blob, raw, sizeof(blob));
+        if (blob.version != RECOVERY_VERSION_1) {
+            return ESP_OK;
+        }
+        s_status.interrupted_pending = true;
+        strncpy(s_status.interrupted_batch_id, blob.batch_id,
+                sizeof(s_status.interrupted_batch_id) - 1);
+        s_status.interrupted_state = (batch_process_state_t)blob.state;
+        s_status.interrupted_moisture = blob.moisture;
+        s_status.interrupted_chamber_temp_c = blob.chamber_temp_c;
+        s_status.interrupted_drying_elapsed_s = blob.drying_elapsed_s;
+        s_status.interrupted_cooling_elapsed_s = blob.cooling_elapsed_s;
+        s_status.interrupted_discharge_elapsed_s = blob.discharge_elapsed_s;
+        s_status.interrupted_discharge_step = blob.discharge_step;
+        ESP_LOGW(TAG,
+                 "Interrupted %s state=%u dry=%us cool=%us disc=%us step=%u moist=%.1f",
+                 s_status.interrupted_batch_id, (unsigned)blob.state,
+                 (unsigned)blob.drying_elapsed_s, (unsigned)blob.cooling_elapsed_s,
+                 (unsigned)blob.discharge_elapsed_s, (unsigned)blob.discharge_step,
+                 blob.moisture);
+        return ESP_OK;
+    }
 
-    ESP_LOGW(TAG, "Interrupted batch %s state=%u moist=%.1f chamber=%.1f",
-             s_status.interrupted_batch_id, (unsigned)blob.state, blob.moisture,
-             blob.chamber_temp_c);
+    if (raw[0] == RECOVERY_MAGIC_LEGACY && sz == sizeof(batch_recovery_blob_legacy_t)) {
+        batch_recovery_blob_legacy_t blob {};
+        memcpy(&blob, raw, sizeof(blob));
+        s_status.interrupted_pending = true;
+        strncpy(s_status.interrupted_batch_id, blob.batch_id,
+                sizeof(s_status.interrupted_batch_id) - 1);
+        s_status.interrupted_state = (batch_process_state_t)blob.state;
+        s_status.interrupted_moisture = blob.moisture;
+        s_status.interrupted_chamber_temp_c = blob.chamber_temp_c;
+        s_status.interrupted_drying_elapsed_s = 0;
+        s_status.interrupted_cooling_elapsed_s = 0;
+        s_status.interrupted_discharge_elapsed_s = 0;
+        s_status.interrupted_discharge_step = 0; /* DISCHARGE_OPEN_DOOR */
+        ESP_LOGW(TAG, "Interrupted legacy %s state=%u moist=%.1f (elapsed=0)",
+                 s_status.interrupted_batch_id, (unsigned)blob.state, blob.moisture);
+        return ESP_OK;
+    }
+
     return ESP_OK;
 }
 
@@ -136,7 +199,7 @@ esp_err_t batch_manager_create(const sensor_data_t *sensors)
         return ESP_ERR_INVALID_ARG;
     }
     if (s_status.interrupted_pending) {
-        ESP_LOGW(TAG, "Cannot create batch — interrupted pending ACK");
+        ESP_LOGW(TAG, "Cannot create batch — interrupted pending Resume/Discard");
         return ESP_ERR_INVALID_STATE;
     }
 
@@ -164,6 +227,63 @@ esp_err_t batch_manager_create(const sensor_data_t *sensors)
     return ESP_OK;
 }
 
+esp_err_t batch_manager_resume_from_interrupted(const sensor_data_t *sensors)
+{
+    if (!s_status.interrupted_pending || s_status.interrupted_batch_id[0] == '\0') {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    const batch_process_state_t st = s_status.interrupted_state;
+    if (st != BATCH_STATE_DRYING && st != BATCH_STATE_COOLING &&
+        st != BATCH_STATE_DISCHARGING) {
+        ESP_LOGW(TAG, "Resume refused — saved state=%u not resumable", (unsigned)st);
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    char id[16];
+    strncpy(id, s_status.interrupted_batch_id, sizeof(id) - 1);
+    id[sizeof(id) - 1] = '\0';
+    const float moist = s_status.interrupted_moisture;
+    const float chamber = s_status.interrupted_chamber_temp_c;
+    const uint32_t dry_s = s_status.interrupted_drying_elapsed_s;
+    const uint32_t cool_s = s_status.interrupted_cooling_elapsed_s;
+    const uint32_t disc_s = s_status.interrupted_discharge_elapsed_s;
+    const uint8_t step = s_status.interrupted_discharge_step;
+
+    s_status = {};
+    strncpy(s_status.batch_id, id, sizeof(s_status.batch_id) - 1);
+    s_status.active = true;
+    s_status.completed = false;
+    s_status.last_state = st;
+    s_status.start_time_s = now_s();
+    s_status.drying_elapsed_s = dry_s;
+    s_status.cooling_elapsed_s = cool_s;
+    s_status.discharge_elapsed_s = disc_s;
+    s_status.initial_moisture = moist;
+    s_status.initial_chamber_temp_c = chamber;
+    s_status.max_chamber_temp_c =
+        (sensors != nullptr && sensors->chamber_temp_valid) ? sensors->chamber_temperature
+                                                            : chamber;
+    s_temp_sum = 0.0;
+    s_temp_samples = 0;
+    s_status.avg_chamber_temp_c = 0.0f;
+    /* Keep interrupted_* copy for process_controller to read before clear — already copied. */
+    s_status.interrupted_drying_elapsed_s = dry_s;
+    s_status.interrupted_cooling_elapsed_s = cool_s;
+    s_status.interrupted_discharge_elapsed_s = disc_s;
+    s_status.interrupted_discharge_step = step;
+    s_status.interrupted_state = st;
+    strncpy(s_status.interrupted_batch_id, id, sizeof(s_status.interrupted_batch_id) - 1);
+    s_status.interrupted_moisture = moist;
+    s_status.interrupted_chamber_temp_c = chamber;
+    s_status.interrupted_pending = false;
+
+    ESP_LOGI(TAG, "Resumed %s state=%u dry=%us cool=%us disc=%us step=%u",
+             s_status.batch_id, (unsigned)st, (unsigned)dry_s, (unsigned)cool_s,
+             (unsigned)disc_s, (unsigned)step);
+    return ESP_OK;
+}
+
 void batch_manager_set_state(batch_process_state_t state)
 {
     s_status.last_state = state;
@@ -188,18 +308,27 @@ void batch_manager_note_chamber_temp(float chamber_temp_c)
 
 esp_err_t batch_manager_save_recovery(batch_process_state_t state,
                                       float moisture,
-                                      float chamber_temp_c)
+                                      float chamber_temp_c,
+                                      uint32_t drying_elapsed_s,
+                                      uint32_t cooling_elapsed_s,
+                                      uint32_t discharge_elapsed_s,
+                                      uint8_t discharge_step)
 {
     if (!s_status.active || s_status.batch_id[0] == '\0') {
         return ESP_ERR_INVALID_STATE;
     }
 
     batch_recovery_blob_t blob {};
-    blob.magic = 0xB6;
+    blob.magic = RECOVERY_MAGIC_V1;
+    blob.version = RECOVERY_VERSION_1;
     blob.state = (uint8_t)state;
+    blob.discharge_step = discharge_step;
     strncpy(blob.batch_id, s_status.batch_id, sizeof(blob.batch_id) - 1);
     blob.moisture = moisture;
     blob.chamber_temp_c = chamber_temp_c;
+    blob.drying_elapsed_s = drying_elapsed_s;
+    blob.cooling_elapsed_s = cooling_elapsed_s;
+    blob.discharge_elapsed_s = discharge_elapsed_s;
     blob.saved_at_s = now_s();
 
     nvs_handle_t h;
@@ -232,7 +361,7 @@ esp_err_t batch_manager_complete(const sensor_data_t *sensors)
     s_status.completed = true;
     s_status.last_state = BATCH_STATE_COMPLETE;
     nvs_clear_recovery();
-    s_status.interrupted_pending = false;
+    clear_interrupted_fields();
 
     ESP_LOGI(TAG,
              "Complete %s dry=%us cool=%us discharge=%us moist=%.1f->%.1f maxT=%.1f",
@@ -248,11 +377,9 @@ esp_err_t batch_manager_acknowledge_interrupted(void)
     if (!s_status.interrupted_pending) {
         return ESP_OK;
     }
-    ESP_LOGI(TAG, "Interrupted batch %s acknowledged/discarded",
-             s_status.interrupted_batch_id);
+    ESP_LOGI(TAG, "Interrupted batch %s discarded", s_status.interrupted_batch_id);
     nvs_clear_recovery();
-    s_status.interrupted_pending = false;
-    memset(s_status.interrupted_batch_id, 0, sizeof(s_status.interrupted_batch_id));
+    clear_interrupted_fields();
     return ESP_OK;
 }
 
@@ -265,6 +392,6 @@ esp_err_t batch_manager_abort(void)
         s_status.last_state = BATCH_STATE_IDLE;
     }
     nvs_clear_recovery();
-    s_status.interrupted_pending = false;
+    clear_interrupted_fields();
     return ESP_OK;
 }

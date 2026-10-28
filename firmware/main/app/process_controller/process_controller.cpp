@@ -11,6 +11,7 @@
 #include "logger.h"
 #include "rtc_manager.h"
 #include "safety_manager.h"
+#include "sensor_manager.h"
 #include "th_sensor.h"
 
 static const char *TAG = "process_ctrl";
@@ -158,7 +159,9 @@ static void save_recovery_throttled(const sensor_data_t *sensors, bool force)
     }
     s_last_recovery_us = now;
     batch_manager_save_recovery(to_batch_state(s_state), sensors->moisture,
-                                sensors->chamber_temperature);
+                                sensors->chamber_temperature, s_drying_elapsed_s,
+                                s_cooling_elapsed_s, s_discharge_elapsed_s,
+                                (uint8_t)s_discharge_step);
 }
 
 static void note_temp(const sensor_data_t *sensors)
@@ -492,6 +495,7 @@ void process_controller_fill_status(system_status_t *status)
     status->cooling_elapsed_s = s_cooling_elapsed_s;
     status->discharge_elapsed_s = s_discharge_elapsed_s;
     status->batch_interrupted = batch_manager_interrupted_pending();
+    status->interrupted_state = 0;
     status->discharge_phase = s_discharge_phase_pub;
     status->discharge_remaining_s = s_discharge_remaining_pub;
     copy_str(status->batch_started, sizeof(status->batch_started), s_started);
@@ -500,8 +504,11 @@ void process_controller_fill_status(system_status_t *status)
     batch_status_t batch {};
     batch_manager_get_status(&batch);
     copy_str(status->batch_id, sizeof(status->batch_id), batch.batch_id);
-    if (status->batch_interrupted && status->batch_id[0] == '\0') {
-        copy_str(status->batch_id, sizeof(status->batch_id), batch.interrupted_batch_id);
+    if (status->batch_interrupted) {
+        status->interrupted_state = (uint8_t)batch.interrupted_state;
+        if (status->batch_id[0] == '\0') {
+            copy_str(status->batch_id, sizeof(status->batch_id), batch.interrupted_batch_id);
+        }
     }
     status->initial_moisture_pct = batch.initial_moisture;
     status->final_moisture_pct = batch.final_moisture;
@@ -607,6 +614,110 @@ esp_err_t process_controller_start(void)
 esp_err_t process_controller_acknowledge_interrupted(void)
 {
     return batch_manager_acknowledge_interrupted();
+}
+
+esp_err_t process_controller_resume_interrupted(void)
+{
+    if (!batch_manager_interrupted_pending()) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (s_state != DRYER_STATE_IDLE && s_state != DRYER_STATE_COMPLETE) {
+        ESP_LOGW(TAG, "Resume refused — state=%s", process_controller_state_name(s_state));
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (safety_manager_active_fault() != FAULT_NONE) {
+        ESP_LOGW(TAG, "Resume refused — active fault");
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    sensor_data_t sensors {};
+    if (sensor_manager_get(&sensors) != ESP_OK) {
+        return ESP_FAIL;
+    }
+    dryer_settings_t settings {};
+    settings_manager_get(&settings);
+
+    system_status_t board {};
+    board.rtc_ok = rtc_manager_is_ok();
+    board.sd_ok = logger_is_healthy();
+    relay_state_t coils {};
+    board.relay_ok = (actuator_manager_refresh(&coils) == ESP_OK);
+
+    fault_code_t fault = FAULT_NONE;
+    if (!precheck_ok(&sensors, &settings, &board, &fault)) {
+        ESP_LOGW(TAG, "Resume blocked — sensors/safety gate fault=%u", (unsigned)fault);
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    batch_status_t before {};
+    batch_manager_get_status(&before);
+    const dryer_state_t resume_state = (dryer_state_t)before.interrupted_state;
+    if (resume_state != DRYER_STATE_DRYING && resume_state != DRYER_STATE_COOLING &&
+        resume_state != DRYER_STATE_DISCHARGING) {
+        ESP_LOGW(TAG, "Resume refused — saved state=%u", (unsigned)resume_state);
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    const uint32_t dry_s = before.interrupted_drying_elapsed_s;
+    const uint32_t cool_s = before.interrupted_cooling_elapsed_s;
+    const uint32_t disc_s = before.interrupted_discharge_elapsed_s;
+    const uint8_t disc_step = before.interrupted_discharge_step;
+
+    if (batch_manager_resume_from_interrupted(&sensors) != ESP_OK) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    format_now(&board, s_started, sizeof(s_started));
+    s_ended[0] = '\0';
+    s_summary_pending = true;
+    s_heater_on = false;
+    reset_heater_pid();
+
+    const int64_t now = esp_timer_get_time();
+    s_drying_elapsed_s = dry_s;
+    s_cooling_elapsed_s = cool_s;
+    s_discharge_elapsed_s = disc_s;
+    s_drying_start_us = now - ((int64_t)dry_s * 1000000LL);
+    s_cooling_start_us = now - ((int64_t)cool_s * 1000000LL);
+    s_discharge_start_us = now - ((int64_t)disc_s * 1000000LL);
+    s_discharge_step = (discharge_step_t)disc_step;
+    s_discharge_step_us = now;
+    s_discharge_phase_pub = disc_step;
+    s_door_cmd_us = 0;
+    s_elevator_cmd_us = 0;
+
+    circulation_manager_configure(&settings);
+    actuator_manager_set_fan(true);
+    safety_manager_request_heater(false);
+
+    if (resume_state == DRYER_STATE_DRYING) {
+        actuator_manager_stop_door();
+        if (circulation_manager_start() != ESP_OK) {
+            ESP_LOGW(TAG, "Resume: circulation start failed");
+            batch_manager_abort();
+            enter_safe_idle_outputs();
+            return ESP_FAIL;
+        }
+    } else if (resume_state == DRYER_STATE_COOLING) {
+        if (circulation_manager_is_active()) {
+            circulation_manager_stop();
+        }
+        actuator_manager_set_elevator(false);
+        actuator_manager_stop_door();
+    } else {
+        /* DISCHARGING — resume at saved sub-step; tick applies actuators. */
+        if (circulation_manager_is_active()) {
+            circulation_manager_stop();
+        }
+        safety_manager_request_heater(false);
+    }
+
+    transition_to(resume_state);
+    save_recovery_throttled(&sensors, true);
+    ESP_LOGI(TAG, "Resumed into %s elapsed dry=%u cool=%u disc=%u",
+             process_controller_state_name(resume_state), (unsigned)dry_s, (unsigned)cool_s,
+             (unsigned)disc_s);
+    return ESP_OK;
 }
 
 esp_err_t process_controller_abort(void)

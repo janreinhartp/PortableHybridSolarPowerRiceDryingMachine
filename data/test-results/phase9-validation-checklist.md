@@ -24,10 +24,14 @@ Precondition: RS485 sensors, relay board, RTC, SD, HMI, and web dashboard reacha
 [ ] Phone or laptop joins SoftAP; http://192.168.4.1 loads
 [ ] GET /api/status and /api/sensors update live
 [ ] Manual Control: fan, elevator, door open/close (heater OFF)
+[ ] System → Set Clock: change time, Save; header clock updates
 [ ] START → PRECHECK → DRYING with heater still disconnected or mock-safe
 [ ] Abort returns to safe IDLE (actuators OFF)
 [ ] Fault inject: disconnect chamber or hot-air probe → matching F00x + Alarms screen
 [ ] ACK clears sticky fault only when condition is gone
+[ ] Power-cycle mid-run: boot IDLE safe; Home shows Resume + Discard
+[ ] Discard clears interrupt; new START allowed
+[ ] (Separate run) Resume restores same batch/phase after sensors OK
 [ ] CSV appears under /sdcard/batches after a short run (or export link works)
 ```
 
@@ -52,7 +56,7 @@ Precondition: Phase 5 safety tests passed; thermal protection and E-stop verifie
 [ ] Cooling completes when chamber ≤ cooling target
 [ ] Discharge: door open → elevator for discharge time → door close → COMPLETE
 [ ] Batch summary logged; history lists the batch
-[ ] Power-loss mid-run: restart shows interrupted batch; heater stays OFF until operator confirms
+[ ] Power-loss mid-run: restart shows interrupted batch; heater stays OFF until Resume or Discard
 ```
 
 Notes:

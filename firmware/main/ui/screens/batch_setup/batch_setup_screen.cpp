@@ -11,7 +11,8 @@ static bool s_alive = false;
 static lv_obj_t *s_value_lbls[10] = {};
 static lv_obj_t *s_ready_items[8] = {};
 static lv_obj_t *s_start = nullptr;
-static lv_obj_t *s_ack = nullptr;
+static lv_obj_t *s_resume = nullptr;
+static lv_obj_t *s_discard = nullptr;
 
 static void on_start(lv_event_t *e)
 {
@@ -32,13 +33,26 @@ static void on_settings(lv_event_t *e)
     }
 }
 
-static void on_ack(lv_event_t *e)
+static void on_resume(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
+        return;
+    }
+    if (process_controller_resume_interrupted() == ESP_OK) {
+        ui_manager_set_banner("Batch Resumed");
+        ui_manager_navigate(UI_SCREEN_RUN);
+    } else {
+        ui_manager_set_banner("Resume Blocked — Check Sensors");
+    }
+}
+
+static void on_discard(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
         return;
     }
     if (process_controller_acknowledge_interrupted() == ESP_OK) {
-        ui_manager_set_banner("Interrupted Batch Acknowledged");
+        ui_manager_set_banner("Interrupted Batch Discarded");
     }
 }
 
@@ -57,7 +71,8 @@ void batch_setup_detach(void)
 {
     s_alive = false;
     s_start = nullptr;
-    s_ack = nullptr;
+    s_resume = nullptr;
+    s_discard = nullptr;
     for (int i = 0; i < 10; ++i) {
         s_value_lbls[i] = nullptr;
     }
@@ -112,9 +127,11 @@ void batch_setup_build(lv_obj_t *parent, const system_status_t *status)
     s_start = ui_theme_make_btn(parent, "Start", on_start, nullptr, 488, 64, UI_COLOR_TEAL);
     lv_obj_set_pos(s_start, 504, 336);
 
-    s_ack = ui_theme_make_btn(parent, "Acknowledge Interrupt", on_ack, nullptr, 272, 48,
-                              UI_COLOR_ORANGE);
-    lv_obj_set_pos(s_ack, 720, 328);
+    s_resume = ui_theme_make_btn(parent, "Resume", on_resume, nullptr, 128, 48, UI_COLOR_TEAL);
+    lv_obj_set_pos(s_resume, 720, 328);
+    s_discard =
+        ui_theme_make_btn(parent, "Discard", on_discard, nullptr, 128, 48, UI_COLOR_SURFACE_ALT);
+    lv_obj_set_pos(s_discard, 864, 328);
 
     s_alive = true;
     batch_setup_update(status);
@@ -128,24 +145,24 @@ void batch_setup_update(const system_status_t *status)
 
     char buf[48];
     snprintf(buf, sizeof(buf), "%.1f %%", status->target_moisture_pct);
-    lv_label_set_text(s_value_lbls[0], buf);
+    ui_label_set_text_if_changed(s_value_lbls[0], buf);
     snprintf(buf, sizeof(buf), "%.0f °C", status->drying_temperature_c);
-    lv_label_set_text(s_value_lbls[1], buf);
+    ui_label_set_text_if_changed(s_value_lbls[1], buf);
     snprintf(buf, sizeof(buf), "%.0f °C", status->cooling_temperature_c);
-    lv_label_set_text(s_value_lbls[2], buf);
+    ui_label_set_text_if_changed(s_value_lbls[2], buf);
     snprintf(buf, sizeof(buf), "%.0f °C", status->max_hot_air_temperature_c);
-    lv_label_set_text(s_value_lbls[3], buf);
-    lv_label_set_text(s_value_lbls[4], ui_circ_mode_name(status->circulation_mode));
+    ui_label_set_text_if_changed(s_value_lbls[3], buf);
+    ui_label_set_text_if_changed(s_value_lbls[4], ui_circ_mode_name(status->circulation_mode));
     snprintf(buf, sizeof(buf), "%u s", (unsigned)status->circulation_interval_s);
-    lv_label_set_text(s_value_lbls[5], buf);
+    ui_label_set_text_if_changed(s_value_lbls[5], buf);
     snprintf(buf, sizeof(buf), "%u s", (unsigned)status->circulation_run_time_s);
-    lv_label_set_text(s_value_lbls[6], buf);
+    ui_label_set_text_if_changed(s_value_lbls[6], buf);
     snprintf(buf, sizeof(buf), "%u s", (unsigned)status->discharge_time_s);
-    lv_label_set_text(s_value_lbls[7], buf);
+    ui_label_set_text_if_changed(s_value_lbls[7], buf);
     snprintf(buf, sizeof(buf), "%u s", (unsigned)status->min_drying_time_s);
-    lv_label_set_text(s_value_lbls[8], buf);
+    ui_label_set_text_if_changed(s_value_lbls[8], buf);
     snprintf(buf, sizeof(buf), "%u s", (unsigned)status->max_drying_time_s);
-    lv_label_set_text(s_value_lbls[9], buf);
+    ui_label_set_text_if_changed(s_value_lbls[9], buf);
 
     const bool ok[8] = {
         status->sd_ok && status->logger_ok,
@@ -161,15 +178,17 @@ void batch_setup_update(const system_status_t *status)
         if (s_ready_items[i] == nullptr) {
             continue;
         }
-        lv_label_set_text(s_ready_items[i], ok[i] ? "Ready" : "Fail");
+        ui_label_set_text_if_changed(s_ready_items[i], ok[i] ? "Ready" : "Fail");
         lv_obj_set_style_text_color(s_ready_items[i],
                                     ui_theme_color(ok[i] ? UI_COLOR_TEAL : UI_COLOR_RED), 0);
     }
 
     if (status->batch_interrupted) {
-        lv_obj_clear_flag(s_ack, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(s_resume, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(s_discard, LV_OBJ_FLAG_HIDDEN);
     } else {
-        lv_obj_add_flag(s_ack, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(s_resume, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(s_discard, LV_OBJ_FLAG_HIDDEN);
     }
 
     const bool start_ok = status->precheck_ready &&

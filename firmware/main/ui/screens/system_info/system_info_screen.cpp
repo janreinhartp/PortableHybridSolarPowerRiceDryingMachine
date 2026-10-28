@@ -23,6 +23,13 @@ static void on_calibrate(lv_event_t *e)
     }
 }
 
+static void on_set_clock(lv_event_t *e)
+{
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
+        ui_manager_navigate(UI_SCREEN_SET_CLOCK);
+    }
+}
+
 static lv_obj_t *make_tile(lv_obj_t *parent, lv_coord_t x, lv_coord_t y, const char *heading)
 {
     lv_obj_t *card = ui_theme_make_card(parent, 320, 120);
@@ -49,10 +56,10 @@ static void set_tile(lv_obj_t *card, const char *value, const char *detail)
     if (v == nullptr) {
         return;
     }
-    lv_label_set_text(v, value != nullptr ? value : "-");
+    ui_label_set_text_if_changed(v, value != nullptr ? value : "-");
     lv_obj_t *d = (lv_obj_t *)lv_obj_get_user_data(v);
     if (d != nullptr) {
-        lv_label_set_text(d, detail != nullptr ? detail : "");
+        ui_label_set_text_if_changed(d, detail != nullptr ? detail : "");
     }
 }
 
@@ -83,12 +90,15 @@ void system_info_build(lv_obj_t *parent, const system_status_t *status, unsigned
     s_tiles[4] = make_tile(parent, 336, 184, "Heap");
     s_tiles[5] = make_tile(parent, 672, 184, "Sensors");
 
-    lv_obj_t *comm = ui_theme_make_btn(parent, "Commission Sensors", on_commission, nullptr, 488,
-                                       64, UI_COLOR_TEAL);
+    lv_obj_t *comm = ui_theme_make_btn(parent, "Commission Sensors", on_commission, nullptr, 320,
+                                       56, UI_COLOR_TEAL);
     lv_obj_set_pos(comm, 0, 336);
-    lv_obj_t *cal = ui_theme_make_btn(parent, "Calibrate Moisture", on_calibrate, nullptr, 488,
-                                      64, UI_COLOR_ACCENT);
-    lv_obj_set_pos(cal, 504, 336);
+    lv_obj_t *cal = ui_theme_make_btn(parent, "Calibrate Moisture", on_calibrate, nullptr, 320,
+                                      56, UI_COLOR_ACCENT);
+    lv_obj_set_pos(cal, 336, 336);
+    lv_obj_t *clock =
+        ui_theme_make_btn(parent, "Set Clock", on_set_clock, nullptr, 320, 56, UI_COLOR_SURFACE_ALT);
+    lv_obj_set_pos(clock, 672, 336);
 
     s_alive = true;
     system_info_update(status, touch_taps);

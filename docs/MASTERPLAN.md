@@ -55,9 +55,9 @@ Known as-built gaps (honest, not blockers for Phase 9 start):
 - Door and elevator use open-loop travel timeouts (no limit-switch GPIOs on the first prototype)
 - F002 (E-stop) is defined for UI/logging but is not raised by the ESP32 (panel electrical only)
 - Manual door-stop API exists; Manual screen has open/close only
-- RTC set/adjust APIs exist; not wired in the HMI
-- Power-loss recovery flags an interrupted batch and requires operator ACK; it does not auto-resume the batch
-- RS485 product baud is **19200**; commission N4D8B08 DIP + XY-MD03 baud reg `0x0102` before flashing if devices still ship at 9600
+- RTC set/adjust is available on HMI: System → Set Clock
+- Power-loss recovery boots IDLE/safe; operator chooses **Resume** (same batch/phase) or **Discard**
+- RS485 product baud is **9600** (factory default on relay + XY-MD03); only commission Modbus addresses
 
 As-built heater control: chamber PID with time-proportioned relay duty + hot-air hard cap (`max_hot_air_temperature_c`). Moisture: 3-point piecewise calibration via System → Calibrate Moisture. EC is not used.
 
@@ -452,7 +452,7 @@ Tasks:
 
 ### XY-MD03 temperature/humidity probes
 
-Model: XY-MD03 (PE probe, SHT40), Modbus-RTU over RS485. Product bus rate: **19200 8N1** (factory default is often 9600 — commission baud before relying on the ESP).
+Model: XY-MD03 (PE probe, SHT40), Modbus-RTU over RS485. Product bus rate: **9600 8N1** (factory default — leave baud unchanged).
 
 | Item | Value |
 |---|---|
@@ -460,25 +460,18 @@ Model: XY-MD03 (PE probe, SHT40), Modbus-RTU over RS485. Product bus rate: **192
 | Bus | Yellow = A, White = B (+ common GND) |
 | Read T/H | FC **0x04**, start reg **0x0001**, count **2** → temp×10, humidity×10 |
 | Device address register | Holding **0x0101** (FC03 read / FC06 write), range **1–247** |
-| Baud register | Holding **0x0102** — codes **0=9600**, **1=14400**, **2=19200**; helper `th_sensor_set_baud(addr, 2)` |
+| Baud register | Holding **0x0102** — codes **0=9600**, **1=14400**, **2=19200**; leave at **0**. Helper `th_sensor_set_baud` is optional tooling only |
 
 There is **no address DIP**. Both probes usually ship as slave **1**. Address is changed by writing register `0x0101` over Modbus (and must persist after power cycle).
 
-**Baud + address commissioning (full procedure):**
+**Address commissioning (full procedure):**
 
 Detailed switch tables and order live in [`hardware/wiring/esp32-gpio-map.md`](../hardware/wiring/esp32-gpio-map.md) §5.1. Summary:
 
-1. **Relay N4D8B08 (power off):** address DIP **A1+A3 ON** → ID **10**. Set baud DIP pair to **19200** (typical: BR1=OFF, BR0=ON — confirm silk/PDF). Power on.
-2. **Hot-air XY-MD03 (one probe only, host still @ 9600 if factory):** FC06 write holding **0x0102 = 2**, power-cycle probe, then assign address **1** (HMI Commission or `0x0101`).
-3. **Chamber XY-MD03 (second probe alone @ 9600):** same baud write **0x0102 = 2**, power-cycle, assign address **2**.
-4. **ESP32:** run firmware at **19200**. Reconnect all three devices; verify hot-air @1, chamber @2, relay @10.
-
-**Address-only reminder (after baud is already 19200):**
-
-1. Relay already at **10**.
-2. Connect **only one** XY-MD03 → HMI Commission → **Assign Hot Air (1)** or **Assign Chamber (2)**.
-3. Power-cycle the probe; confirm it answers at the new ID.
-4. Repeat for the second probe; reconnect both.
+1. **Relay R4D8A08 / N4D8B08 (power off):** address DIP **A1+A3 ON** → ID **10**. Leave baud at factory **9600** (R4D8A08: M1/M2 open, M0 open). Power on.
+2. **Hot-air XY-MD03 (one probe only @ 9600):** assign address **1** (HMI Commission or `0x0101`), power-cycle.
+3. **Chamber XY-MD03 (second probe alone @ 9600):** assign address **2**, power-cycle.
+4. **ESP32:** run firmware at **9600**. Reconnect all three devices; verify hot-air @1, chamber @2, relay @10.
 
 Firmware must expose:
 
@@ -773,7 +766,7 @@ Do not implement these before the baseline dryer works:
 - AI drying optimization
 - Automatic loading
 
-Chamber PID + hot-air cap, 3-point moisture calibration HMI, boot splash, and RS485 @ 19200 are in the baseline.
+Chamber PID + hot-air cap, 3-point moisture calibration HMI, boot splash, and RS485 @ 9600 are in the baseline.
 
 ---
 

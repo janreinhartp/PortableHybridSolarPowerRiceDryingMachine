@@ -1,6 +1,6 @@
 # 05 Software Design
 
-**Status:** Firmware architecture. As-built Phases 0–8 plus boot splash, 3-point moisture cal HMI, chamber PID heater, EC removed, RS485 @ 19200. Implementation status: see [`MASTERPLAN.md`](MASTERPLAN.md).
+**Status:** Firmware architecture. As-built Phases 0–8 plus boot splash, 3-point moisture cal HMI, chamber PID heater, EC removed, RS485 @ 9600. Implementation status: see [`MASTERPLAN.md`](MASTERPLAN.md).
 
 ## 1. Purpose
 
@@ -1010,7 +1010,7 @@ The Home screen displays:
 - Rice moisture, hot-air temp, chamber temp, chamber humidity
 - EC and heater / fan / elevator / door status
 - Current process state (header chip) and batch note
-- **Start Batch**; **Acknowledge Interrupt** when an interrupted batch is pending
+- **Start Batch**; when an interrupted batch is pending: **Resume** (continue same batch/phase) or **Discard**
 
 ---
 
@@ -1526,20 +1526,21 @@ Door -> Safe/CLOSED
 
 The system must not automatically restart the heater or continue drying without operator confirmation.
 
-The previous batch state may be stored for recovery analysis.
+NVS stores a versioned recovery blob (batch id, phase, moisture, chamber temp, elapsed timers, discharge sub-step). On boot the machine stays IDLE with safe outputs and `batch_interrupted` until the operator chooses:
+
+- **Resume** — restore the same batch id and saved phase (DRYING / COOLING / DISCHARGING) after a live sensor/safety recheck; DRYING may re-enable the heater under PID + hot-air cap.
+- **Discard** — erase the recovery flag so a new START is allowed.
 
 Example:
 
 ```text
 Previous State: DRYING
 Power Lost
-System Restarted
+System Restarted → IDLE (safe outputs)
 
-Status:
-"Previous batch interrupted."
+HMI:
+"BATCH-0042 interrupted in DRYING. Resume or Discard."
 ```
-
-The operator can decide whether to restart or perform a recovery procedure.
 
 ---
 

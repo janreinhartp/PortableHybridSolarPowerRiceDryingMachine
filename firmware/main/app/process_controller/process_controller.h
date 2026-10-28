@@ -30,6 +30,12 @@ esp_err_t process_controller_start(void);
 /** Discard interrupted-batch NVS flag so a new START is allowed. */
 esp_err_t process_controller_acknowledge_interrupted(void);
 
+/**
+ * Operator-confirmed resume of interrupted batch into saved phase
+ * (DRYING / COOLING / DISCHARGING) after sensor/safety gate.
+ */
+esp_err_t process_controller_resume_interrupted(void);
+
 /** Abort active batch → IDLE (safe outputs). */
 esp_err_t process_controller_abort(void);
 

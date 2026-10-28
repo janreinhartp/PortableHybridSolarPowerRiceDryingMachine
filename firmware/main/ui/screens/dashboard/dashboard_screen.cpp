@@ -14,7 +14,8 @@ static ui_metric_t s_chamber {};
 static ui_metric_t s_humidity {};
 static ui_actuator_leds_t s_leds {};
 static lv_obj_t *s_note = nullptr;
-static lv_obj_t *s_ack = nullptr;
+static lv_obj_t *s_resume = nullptr;
+static lv_obj_t *s_discard = nullptr;
 static lv_obj_t *s_start = nullptr;
 
 static void on_start(lv_event_t *e)
@@ -25,15 +26,28 @@ static void on_start(lv_event_t *e)
     ui_manager_navigate(UI_SCREEN_BATCH_SETUP);
 }
 
-static void on_ack(lv_event_t *e)
+static void on_resume(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
+        return;
+    }
+    if (process_controller_resume_interrupted() == ESP_OK) {
+        ui_manager_set_banner("Batch Resumed");
+        ui_manager_navigate(UI_SCREEN_RUN);
+    } else {
+        ui_manager_set_banner("Resume Blocked — Check Sensors");
+    }
+}
+
+static void on_discard(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
         return;
     }
     if (process_controller_acknowledge_interrupted() == ESP_OK) {
-        ui_manager_set_banner("Interrupted Batch Acknowledged");
+        ui_manager_set_banner("Interrupted Batch Discarded");
     } else {
-        ui_manager_set_banner("Could Not Acknowledge Interrupted Batch");
+        ui_manager_set_banner("Could Not Discard Interrupted Batch");
     }
 }
 
@@ -46,7 +60,8 @@ void dashboard_detach(void)
     s_humidity = {};
     s_leds = {};
     s_note = nullptr;
-    s_ack = nullptr;
+    s_resume = nullptr;
+    s_discard = nullptr;
     s_start = nullptr;
 }
 
@@ -69,17 +84,20 @@ void dashboard_build(lv_obj_t *parent, const system_status_t *status)
     lv_obj_set_pos(s_leds.root, 0, 208);
 
     s_note = ui_theme_make_label(parent, "", ui_font_body(), UI_COLOR_TEXT);
-    lv_obj_set_width(s_note, 640);
+    lv_obj_set_width(s_note, 480);
     lv_label_set_long_mode(s_note, LV_LABEL_LONG_DOT);
-    lv_obj_set_pos(s_note, 40, 360);
+    lv_obj_set_pos(s_note, 0, 360);
 
-    s_ack = ui_theme_make_btn(parent, "Acknowledge Interrupt", on_ack, nullptr, 260, 64,
-                              UI_COLOR_ORANGE);
-    lv_obj_set_pos(s_ack, 392, 344);
+    s_resume = ui_theme_make_btn(parent, "Resume", on_resume, nullptr, 160, 64, UI_COLOR_TEAL);
+    lv_obj_set_pos(s_resume, 496, 344);
+
+    s_discard =
+        ui_theme_make_btn(parent, "Discard", on_discard, nullptr, 160, 64, UI_COLOR_SURFACE_ALT);
+    lv_obj_set_pos(s_discard, 672, 344);
 
     s_start =
         ui_theme_make_btn(parent, "Start Batch", on_start, nullptr, 320, 64, UI_COLOR_TEAL);
-    lv_obj_set_pos(s_start, 656, 344);
+    lv_obj_set_pos(s_start, 672, 344);
 
     s_alive = true;
     dashboard_update(status);
@@ -131,16 +149,23 @@ void dashboard_update(const system_status_t *status)
     ui_leds_set(&s_leds, status);
 
     if (status->batch_interrupted) {
-        lv_label_set_text(s_note, "Interrupted Batch Pending. Acknowledge Before A New Start.");
-        lv_obj_clear_state(s_ack, LV_STATE_DISABLED);
-        lv_obj_clear_flag(s_ack, LV_OBJ_FLAG_HIDDEN);
+        char note[96];
+        snprintf(note, sizeof(note), "%s interrupted in %s. Resume or Discard.",
+                 status->batch_id[0] ? status->batch_id : "Batch",
+                 process_controller_state_name((dryer_state_t)status->interrupted_state));
+        ui_label_set_text_if_changed(s_note, note);
+        lv_obj_clear_flag(s_resume, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(s_discard, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(s_start, LV_OBJ_FLAG_HIDDEN);
     } else if (status->active_fault != 0) {
-        lv_label_set_text(s_note, "Active Fault. Open Alarms Before Starting.");
-        lv_obj_add_state(s_ack, LV_STATE_DISABLED);
-        lv_obj_add_flag(s_ack, LV_OBJ_FLAG_HIDDEN);
+        ui_label_set_text_if_changed(s_note, "Active Fault. Open Alarms Before Starting.");
+        lv_obj_add_flag(s_resume, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(s_discard, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(s_start, LV_OBJ_FLAG_HIDDEN);
     } else {
-        lv_label_set_text(s_note, "Load Rice, Then Start Batch");
-        lv_obj_add_state(s_ack, LV_STATE_DISABLED);
-        lv_obj_add_flag(s_ack, LV_OBJ_FLAG_HIDDEN);
+        ui_label_set_text_if_changed(s_note, "Load Rice, Then Start Batch");
+        lv_obj_add_flag(s_resume, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(s_discard, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(s_start, LV_OBJ_FLAG_HIDDEN);
     }
 }

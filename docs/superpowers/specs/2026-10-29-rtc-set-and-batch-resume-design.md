@@ -1,7 +1,7 @@
 # Design: RTC Set Clock HMI + Confirmed Batch Resume
 
 **Date:** 2026-10-29  
-**Status:** Draft for review  
+**Status:** Implemented  
 **Approach:** Minimal delta (Approach A)  
 **Related:** `rtc_manager`, `batch_manager`, `process_controller`, System Info / Dashboard HMI
 

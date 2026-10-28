@@ -32,6 +32,7 @@ idf_component_register(
         "ui/screens/commission/commission_screen.cpp"
         "ui/screens/boot/boot_screen.cpp"
         "ui/screens/calibrate_moisture/calibrate_moisture_screen.cpp"
+        "ui/screens/set_clock/set_clock_screen.cpp"
     INCLUDE_DIRS
         "."
         "board"
@@ -65,6 +66,7 @@ idf_component_register(
         "ui/screens/commission"
         "ui/screens/boot"
         "ui/screens/calibrate_moisture"
+        "ui/screens/set_clock"
     REQUIRES
         nvs_flash
         esp_timer
