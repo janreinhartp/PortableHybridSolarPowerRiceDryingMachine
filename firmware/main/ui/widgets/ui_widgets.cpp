@@ -35,9 +35,9 @@ void ui_metric_set(ui_metric_t *m, const char *value, const char *unit, const ch
     if (m == nullptr || m->value_lbl == nullptr) {
         return;
     }
-    lv_label_set_text(m->value_lbl, value != nullptr ? value : "-");
+    ui_label_set_text_if_changed(m->value_lbl, value != nullptr ? value : "-");
     if (m->unit_lbl != nullptr) {
-        lv_label_set_text(m->unit_lbl, unit != nullptr ? unit : "");
+        ui_label_set_text_if_changed(m->unit_lbl, unit != nullptr ? unit : "");
         if (unit != nullptr && unit[0] != '\0') {
             lv_obj_align_to(m->unit_lbl, m->value_lbl, LV_ALIGN_OUT_RIGHT_BOTTOM, 6, 0);
             lv_obj_clear_flag(m->unit_lbl, LV_OBJ_FLAG_HIDDEN);
@@ -46,7 +46,7 @@ void ui_metric_set(ui_metric_t *m, const char *value, const char *unit, const ch
         }
     }
     if (m->detail_lbl != nullptr) {
-        lv_label_set_text(m->detail_lbl, detail != nullptr ? detail : "");
+        ui_label_set_text_if_changed(m->detail_lbl, detail != nullptr ? detail : "");
     }
 }
 
@@ -114,14 +114,16 @@ void ui_bar_gauge_set(ui_bar_gauge_t *g, float value)
     if (v > g->max_v) {
         v = g->max_v;
     }
-    lv_bar_set_value(g->bar, v, LV_ANIM_OFF);
+    if (lv_bar_get_value(g->bar) != v) {
+        lv_bar_set_value(g->bar, v, LV_ANIM_OFF);
+    }
     char buf[28];
     if (g->unit[0] != '\0') {
         snprintf(buf, sizeof(buf), "%.1f %s", value, g->unit);
     } else {
         snprintf(buf, sizeof(buf), "%.1f", value);
     }
-    lv_label_set_text(g->value_lbl, buf);
+    ui_label_set_text_if_changed(g->value_lbl, buf);
 }
 
 void ui_bar_gauge_set_target(ui_bar_gauge_t *g, bool show, float target)
@@ -142,7 +144,7 @@ void ui_bar_gauge_set_target(ui_bar_gauge_t *g, bool show, float target)
     } else {
         snprintf(buf, sizeof(buf), "Target %.1f", target);
     }
-    lv_label_set_text(g->target_lbl, buf);
+    ui_label_set_text_if_changed(g->target_lbl, buf);
     lv_obj_clear_flag(g->target_lbl, LV_OBJ_FLAG_HIDDEN);
 
     if (g->marker != nullptr && g->max_v > g->min_v) {
@@ -194,7 +196,7 @@ void ui_kpi_set(ui_kpi_t *k, const char *value)
     if (k == nullptr || k->value == nullptr) {
         return;
     }
-    lv_label_set_text(k->value, value != nullptr ? value : "-");
+    ui_label_set_text_if_changed(k->value, value != nullptr ? value : "-");
 }
 
 ui_trend_t ui_trend_create(lv_obj_t *parent, lv_coord_t w, lv_coord_t h)
@@ -324,7 +326,7 @@ void ui_leds_set(ui_actuator_leds_t *leds, const system_status_t *status)
                 ui_theme_color(active ? colors[i] : (uint32_t)UI_COLOR_BORDER), 0);
         }
         if (leds->status[i] != nullptr) {
-            lv_label_set_text(leds->status[i], text[i]);
+            ui_label_set_text_if_changed(leds->status[i], text[i]);
             lv_obj_set_style_text_color(leds->status[i], ui_theme_color(c), 0);
         }
     }
@@ -382,10 +384,19 @@ void ui_state_chip_set(lv_obj_t *chip, uint8_t dryer_state)
     if (chip == nullptr) {
         return;
     }
+    /* user_data on chip is the label; stash last state in label's sibling via style cache. */
+    static lv_obj_t *s_last_chip = nullptr;
+    static uint8_t s_last_state = 0xFF;
+    if (chip == s_last_chip && dryer_state == s_last_state) {
+        return;
+    }
+    s_last_chip = chip;
+    s_last_state = dryer_state;
+
     lv_obj_t *lbl = (lv_obj_t *)lv_obj_get_user_data(chip);
     const lv_color_t color = ui_theme_state_color(dryer_state);
     if (lbl != nullptr) {
-        lv_label_set_text(lbl, state_chip_text(dryer_state));
+        ui_label_set_text_if_changed(lbl, state_chip_text(dryer_state));
         lv_obj_set_style_text_color(lbl, color, 0);
         lv_obj_t *dot = (lv_obj_t *)lv_obj_get_user_data(lbl);
         if (dot != nullptr) {

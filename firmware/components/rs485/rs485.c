@@ -13,11 +13,11 @@
 #define RS485_UART_NUM   UART_NUM_1
 #define RS485_TX_GPIO    GPIO_NUM_16
 #define RS485_RX_GPIO    GPIO_NUM_15
-#define RS485_BAUD       19200
+#define RS485_BAUD       9600
 #define RS485_RX_BUF     512
 #define RS485_TX_BUF     256
-/* Modbus RTU inter-frame gap ≈ 3.5 character times. */
-#define RS485_IFG_MS     2
+/* Modbus RTU inter-frame gap ≈ 3.5 character times at 9600. */
+#define RS485_IFG_MS     4
 
 static const char *TAG = "rs485";
 static SemaphoreHandle_t s_bus_mutex;

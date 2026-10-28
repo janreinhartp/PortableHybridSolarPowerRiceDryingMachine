@@ -100,11 +100,11 @@ void run_update(const system_status_t *status)
     }
 
     if (s_timer_title != nullptr) {
-        lv_label_set_text(s_timer_title, title);
+        ui_label_set_text_if_changed(s_timer_title, title);
     }
     char buf[24];
     ui_format_hms(buf, sizeof(buf), seconds);
     if (s_timer_value != nullptr) {
-        lv_label_set_text(s_timer_value, buf);
+        ui_label_set_text_if_changed(s_timer_value, buf);
     }
 }

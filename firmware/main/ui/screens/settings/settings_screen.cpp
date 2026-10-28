@@ -140,7 +140,7 @@ static void render_values(void)
     snprintf(storage[F_HOT], sizeof(storage[0]), "%.0f °C", s_draft.max_hot_air_temperature_c);
     for (int i = 0; i < F_COUNT; ++i) {
         if (s_values[i] != nullptr) {
-            lv_label_set_text(s_values[i], storage[i]);
+            ui_label_set_text_if_changed(s_values[i], storage[i]);
         }
     }
 }
@@ -258,21 +258,26 @@ void settings_build(lv_obj_t *parent, const system_status_t *status)
     lv_obj_t *title = ui_theme_make_label(parent, "Settings", ui_font_title(), UI_COLOR_TEXT);
     lv_obj_set_pos(title, 0, 0);
 
-    lv_obj_t *scroll = lv_obj_create(parent);
-    lv_obj_set_size(scroll, 992, 280);
-    lv_obj_set_pos(scroll, 0, 48);
-    lv_obj_set_style_bg_opa(scroll, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(scroll, 0, 0);
-    lv_obj_set_style_pad_all(scroll, 0, 0);
-    lv_obj_add_flag(scroll, LV_OBJ_FLAG_SCROLLABLE);
+    /* Non-scrollable grid: 5×3 denser cards fit above Defaults/Save. */
+    lv_obj_t *grid = lv_obj_create(parent);
+    lv_obj_set_size(grid, 992, 280);
+    lv_obj_set_pos(grid, 0, 40);
+    lv_obj_set_style_bg_opa(grid, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(grid, 0, 0);
+    lv_obj_set_style_pad_all(grid, 0, 0);
+    lv_obj_clear_flag(grid, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scrollbar_mode(grid, LV_SCROLLBAR_MODE_OFF);
 
     const lv_coord_t card_w = 320;
+    const lv_coord_t card_h = 52;
     const lv_coord_t gap = 16;
+    const lv_coord_t row_pitch = 56;
     for (int i = 0; i < F_COUNT; ++i) {
         const int row = i / 3;
         const int col = i % 3;
-        lv_obj_t *card = ui_theme_make_card(scroll, card_w, 64);
-        lv_obj_set_pos(card, (lv_coord_t)(col * (card_w + gap)), (lv_coord_t)(row * 72));
+        lv_obj_t *card = ui_theme_make_card(grid, card_w, card_h);
+        lv_obj_set_pos(card, (lv_coord_t)(col * (card_w + gap)),
+                       (lv_coord_t)(row * row_pitch));
         lv_obj_t *name = ui_theme_make_label(card, names[i], ui_font_caption(), UI_COLOR_MUTED);
         lv_obj_align(name, LV_ALIGN_LEFT_MID, 0, 0);
 
@@ -282,22 +287,22 @@ void settings_build(lv_obj_t *parent, const system_status_t *status)
         s_args[i][1].sign = 1;
 
         lv_obj_t *down =
-            ui_theme_make_btn(card, "-", on_adjust, &s_args[i][0], 40, 40, UI_COLOR_SURFACE_ALT);
-        lv_obj_align(down, LV_ALIGN_RIGHT_MID, -112, 0);
+            ui_theme_make_btn(card, "-", on_adjust, &s_args[i][0], 36, 36, UI_COLOR_SURFACE_ALT);
+        lv_obj_align(down, LV_ALIGN_RIGHT_MID, -108, 0);
         s_values[i] = ui_theme_make_label(card, "", ui_font_body(), UI_COLOR_CREAM);
         lv_obj_set_width(s_values[i], 64);
         lv_label_set_long_mode(s_values[i], LV_LABEL_LONG_CLIP);
         lv_obj_align(s_values[i], LV_ALIGN_RIGHT_MID, -48, 0);
         lv_obj_t *up =
-            ui_theme_make_btn(card, "+", on_adjust, &s_args[i][1], 40, 40, UI_COLOR_SURFACE_ALT);
+            ui_theme_make_btn(card, "+", on_adjust, &s_args[i][1], 36, 36, UI_COLOR_SURFACE_ALT);
         lv_obj_align(up, LV_ALIGN_RIGHT_MID, 0, 0);
     }
 
     lv_obj_t *defaults =
-        ui_theme_make_btn(parent, "Defaults", on_defaults, nullptr, 488, 64, UI_COLOR_SURFACE_ALT);
-    lv_obj_set_pos(defaults, 0, 344);
-    s_save = ui_theme_make_btn(parent, "Save", on_save, nullptr, 488, 64, UI_COLOR_TEAL);
-    lv_obj_set_pos(s_save, 504, 344);
+        ui_theme_make_btn(parent, "Defaults", on_defaults, nullptr, 488, 56, UI_COLOR_SURFACE_ALT);
+    lv_obj_set_pos(defaults, 0, 332);
+    s_save = ui_theme_make_btn(parent, "Save", on_save, nullptr, 488, 56, UI_COLOR_TEAL);
+    lv_obj_set_pos(s_save, 504, 332);
 
     s_alive = true;
     render_values();

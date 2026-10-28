@@ -29,11 +29,11 @@ static void render_points(void)
     for (int i = 0; i < 3; ++i) {
         if (s_pts[i].v_lbl) {
             snprintf(buf, sizeof(buf), "%.3f V", vs[i]);
-            lv_label_set_text(s_pts[i].v_lbl, buf);
+            ui_label_set_text_if_changed(s_pts[i].v_lbl, buf);
         }
         if (s_pts[i].y_lbl) {
             snprintf(buf, sizeof(buf), "%.1f %%", ys[i]);
-            lv_label_set_text(s_pts[i].y_lbl, buf);
+            ui_label_set_text_if_changed(s_pts[i].y_lbl, buf);
         }
     }
 }
@@ -214,11 +214,11 @@ void calibrate_moisture_update(const system_status_t *status)
     } else {
         snprintf(buf, sizeof(buf), "Live: moisture offline");
     }
-    lv_label_set_text(s_live, buf);
+    ui_label_set_text_if_changed(s_live, buf);
 
     const bool ok = process_controller_manual_control_allowed();
-    lv_label_set_text(s_note, ok ? "Capture three reference points, then Save."
-                                 : "Available in Idle / Complete only.");
+    ui_label_set_text_if_changed(s_note, ok ? "Capture three reference points, then Save."
+                                            : "Available in Idle / Complete only.");
     if (s_save != nullptr) {
         if (ok) {
             lv_obj_clear_state(s_save, LV_STATE_DISABLED);
