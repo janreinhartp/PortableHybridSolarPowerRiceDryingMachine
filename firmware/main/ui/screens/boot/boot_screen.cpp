@@ -28,7 +28,7 @@ static const char *status_text(boot_status_t st)
     case BOOT_STATUS_FAIL:
         return "Fail";
     default:
-        return "…";
+        return "...";
     }
 }
 
@@ -78,7 +78,7 @@ void boot_screen_show(void)
     lv_obj_align(brand, LV_ALIGN_TOP_MID, 0, 48);
 
     lv_obj_t *sub =
-        ui_theme_make_label(s_scr, "Starting…", ui_font_body(), UI_COLOR_MUTED);
+        ui_theme_make_label(s_scr, "Starting...", ui_font_body(), UI_COLOR_MUTED);
     lv_obj_align(sub, LV_ALIGN_TOP_MID, 0, 96);
 
     s_bar = lv_bar_create(s_scr);
@@ -135,7 +135,9 @@ void boot_screen_destroy(void)
     if (s_scr == nullptr) {
         return;
     }
-    lv_obj_del(s_scr);
+    /* Do not lv_obj_del the active screen — that sets act_scr=NULL and
+     * crashes ui_manager_show_hmi's lv_obj_clean(lv_scr_act()). Drop our
+     * handles; show_hmi will clean and rebuild on the same screen. */
     s_scr = nullptr;
     s_bar = nullptr;
     for (int i = 0; i < BOOT_STEP_COUNT; ++i) {

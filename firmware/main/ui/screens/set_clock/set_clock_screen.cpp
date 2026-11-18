@@ -176,7 +176,7 @@ void set_clock_build(lv_obj_t *parent, const system_status_t *status)
         s_draft.hour = 0;
         s_draft.minute = 0;
         s_draft.second = 0;
-        ui_manager_set_banner("RTC Read Failed — Edit Carefully");
+        ui_manager_set_banner("RTC Read Failed - Edit Carefully");
     }
     clamp_draft();
 

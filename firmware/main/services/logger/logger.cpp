@@ -1,6 +1,7 @@
 #include "logger.h"
 
 #include <cerrno>
+#include <cstddef>
 #include <cstdio>
 #include <cstring>
 #include <sys/stat.h>
@@ -483,7 +484,7 @@ size_t logger_copy_history(logger_summary_t *out, size_t max_entries)
         return 0;
     }
     if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(50)) != pdTRUE) {
-        return 0;
+        return SIZE_MAX;
     }
     size_t n = s_history_count;
     if (n > max_entries) {
@@ -502,7 +503,7 @@ size_t logger_copy_alarms(logger_alarm_t *out, size_t max_entries)
         return 0;
     }
     if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(50)) != pdTRUE) {
-        return 0;
+        return SIZE_MAX;
     }
     size_t n = s_alarm_count;
     if (n > max_entries) {

@@ -20,15 +20,8 @@ extern "C" {
 #define RELAY_CH_ELEVATOR       1  /* R1 */
 #define RELAY_CH_HEATER         2  /* R2 */
 #define RELAY_CH_FAN            3  /* R3 */
-#define RELAY_CH_DOOR_OPEN      4  /* R4 */
-#define RELAY_CH_DOOR_CLOSE     5  /* R5 */
-
-/* Legacy aliases used by older call sites / comments. */
-#define RELAY_COIL_ELEVATOR     RELAY_CH_ELEVATOR
-#define RELAY_COIL_HEATER       RELAY_CH_HEATER
-#define RELAY_COIL_FAN          RELAY_CH_FAN
-#define RELAY_COIL_DOOR_OPEN    RELAY_CH_DOOR_OPEN
-#define RELAY_COIL_DOOR_CLOSE   RELAY_CH_DOOR_CLOSE
+#define RELAY_CH_DOOR_OPEN      4  /* R4 — level trigger: ON opens, OFF closes */
+#define RELAY_CH_DOOR_CLOSE     5  /* R5 — unused; firmware forces this coil off */
 
 typedef struct {
     bool online;
@@ -48,7 +41,6 @@ esp_err_t relay_modbus_set_heater(bool on);
 esp_err_t relay_modbus_set_fan(bool on);
 esp_err_t relay_modbus_open_door(void);
 esp_err_t relay_modbus_close_door(void);
-esp_err_t relay_modbus_stop_door(void);
 esp_err_t relay_modbus_all_off(void);
 
 #ifdef __cplusplus

@@ -92,10 +92,10 @@ void commission_build(lv_obj_t *parent, const system_status_t *status)
     s_rows[2] = make_sensor_row(parent, 192, "Rice Moisture");
     s_rows[3] = nullptr;
 
-    lv_obj_t *hot = ui_theme_make_btn(parent, "Assign Hot Air (1)", on_hotair, nullptr, 320, 48,
+    lv_obj_t *hot = ui_theme_make_btn(parent, "Assign Hot Air (2)", on_hotair, nullptr, 320, 48,
                                       UI_COLOR_ACCENT);
     lv_obj_set_pos(hot, 0, 336);
-    lv_obj_t *ch = ui_theme_make_btn(parent, "Assign Chamber (2)", on_chamber, nullptr, 320, 48,
+    lv_obj_t *ch = ui_theme_make_btn(parent, "Assign Chamber (1)", on_chamber, nullptr, 320, 48,
                                      UI_COLOR_TEAL);
     lv_obj_set_pos(ch, 336, 336);
     lv_obj_t *back =

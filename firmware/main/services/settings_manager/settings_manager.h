@@ -19,7 +19,7 @@ typedef struct {
     float drying_temperature_c;
     float cooling_temperature_c;
 
-    /** Chamber PID (1 Hz) → duty 0–100 for time-proportioned heater relay. */
+    /** Hot-air PID (1 Hz) → duty 0–100 for time-proportioned heater relay. */
     float pid_kp;
     float pid_ki;
     float pid_kd;

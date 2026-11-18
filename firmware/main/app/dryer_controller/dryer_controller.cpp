@@ -209,7 +209,6 @@ void dryer_controller_poll_fieldbus(system_status_t *status)
     status->relay_heater = relays.heater;
     status->relay_fan = relays.fan;
     status->relay_door_open = relays.door_open;
-    status->relay_door_close = relays.door_close;
 
     safety_status_t safety {};
     safety_manager_get_status(&safety);

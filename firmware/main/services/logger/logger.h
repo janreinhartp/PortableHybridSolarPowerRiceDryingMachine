@@ -63,7 +63,11 @@ void logger_submit_alarm(const logger_alarm_t *alarm);
 bool logger_is_healthy(void);
 uint32_t logger_dropped_count(void);
 
-/** Newest entry first. Safe to call from the HMI task. */
+/**
+ * Newest entry first. Safe to call from the HMI task.
+ * Returns SIZE_MAX if the logger lock is busy — callers must not treat that as
+ * an empty list (doing so hides rows for a tick and causes HMI flicker).
+ */
 size_t logger_copy_history(logger_summary_t *out, size_t max_entries);
 size_t logger_copy_alarms(logger_alarm_t *out, size_t max_entries);
 

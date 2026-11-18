@@ -1,5 +1,6 @@
 #include "web_server.h"
 
+#include <cstddef>
 #include <cstdio>
 #include <cstring>
 #include <sys/stat.h>
@@ -80,7 +81,8 @@ async function refresh(){
     document.getElementById('status').innerHTML=rows({
       State:st.state,Batch:st.batch_id||'—',Moisture:(st.moisture??'—')+' %',
       Temperature:(st.temperature??'—')+' °C',Humidity:(st.humidity??'—')+' %',
-      Heater:onOff(st.heater),Fan:onOff(st.fan),Elevator:onOff(st.elevator),
+      Heater:onOff(st.heater),Fan:onOff(st.fan),
+      Elevator:onOff(st.elevator),
       WiFi:st.wifi_ssid||'—',SD:okBad(st.sd_ok,st.sd_ok?'Ok':'Fail'),
       Logger:okBad(st.logger_ok,st.logger_ok?'Ok':'Fail')});
     document.getElementById('sensors').innerHTML=rows({
@@ -91,8 +93,9 @@ async function refresh(){
       'Chamber OK':okBad(se.chamber_ok,se.chamber_ok),
       'Moisture OK':okBad(se.moisture_ok,se.moisture_ok)});
     document.getElementById('actuators').innerHTML=rows({
-      Elevator:onOff(ac.elevator),Heater:onOff(ac.heater),Fan:onOff(ac.fan),
-      'Door open':onOff(ac.door_open),'Door close':onOff(ac.door_close)});
+      Elevator:onOff(ac.elevator),Heater:onOff(ac.heater),
+      Fan:onOff(ac.fan),
+      Door:ac.door_open?'Open':'Closed'});
     document.getElementById('batch').innerHTML=rows({
       ID:ba.batch_id||'—',State:ba.state,Interrupted:ba.interrupted?'Yes':'No',
       'Target moisture %':ba.target_moisture,'Initial %':ba.initial_moisture,
@@ -100,7 +103,8 @@ async function refresh(){
       'Discharge s':ba.discharge_s,Started:ba.started||'—',Ended:ba.ended||'—'});
     document.getElementById('settings').innerHTML=rows({
       'Target moisture %':set.target_moisture,'Drying °C':set.drying_temperature,
-      'Cooling °C':set.cooling_temperature,'PID Kp':set.pid_kp,'PID Ki':set.pid_ki,
+      'Cooling °C':set.cooling_temperature,
+      'PID Kp':set.pid_kp,'PID Ki':set.pid_ki,
       'PID Kd':set.pid_kd,'PID window s':set.pid_window_s,
       'Max hot air °C':set.max_hot_air_temperature,
       Circulation:set.circulation_mode,'Interval s':set.circulation_interval_s,
@@ -170,7 +174,7 @@ static esp_err_t handle_api_status(httpd_req_t *req)
              process_controller_state_name((dryer_state_t)st->dryer_state),
              st->batch_id[0] ? st->batch_id : "",
              (double)st->moisture_pct, (double)st->chamber_temp_c,
-             (double)st->chamber_rh, st->relay_heater ? "true" : "false",
+             (double)st->chamber_rh,              st->relay_heater ? "true" : "false",
              st->relay_fan ? "true" : "false",
              st->relay_elevator ? "true" : "false", s_ssid,
              st->sd_ok ? "true" : "false", st->logger_ok ? "true" : "false",
@@ -211,12 +215,11 @@ static esp_err_t handle_api_actuators(httpd_req_t *req)
     char buf[256];
     snprintf(buf, sizeof(buf),
              "{\"elevator\":%s,\"heater\":%s,\"fan\":%s,"
-             "\"door_open\":%s,\"door_close\":%s}",
+             "\"door_open\":%s}",
              st->relay_elevator ? "true" : "false",
              st->relay_heater ? "true" : "false",
              st->relay_fan ? "true" : "false",
-             st->relay_door_open ? "true" : "false",
-             st->relay_door_close ? "true" : "false");
+             st->relay_door_open ? "true" : "false");
     return send_json(req, buf);
 }
 
@@ -248,10 +251,11 @@ static esp_err_t handle_api_settings(httpd_req_t *req)
 {
     dryer_settings_t cfg {};
     settings_manager_get(&cfg);
-    char buf[512];
+    char buf[640];
     snprintf(buf, sizeof(buf),
              "{\"target_moisture\":%.2f,\"drying_temperature\":%.2f,"
-             "\"cooling_temperature\":%.2f,\"pid_kp\":%.2f,\"pid_ki\":%.3f,"
+             "\"cooling_temperature\":%.2f,"
+             "\"pid_kp\":%.2f,\"pid_ki\":%.3f,"
              "\"pid_kd\":%.2f,\"pid_window_s\":%u,"
              "\"circulation_mode\":\"%s\",\"circulation_interval_s\":%u,"
              "\"circulation_run_time_s\":%u,\"discharge_time_s\":%u,"
@@ -273,6 +277,9 @@ static esp_err_t handle_api_history(httpd_req_t *req)
 {
     logger_summary_t hist[LOGGER_HISTORY_MAX] {};
     const size_t n = logger_copy_history(hist, LOGGER_HISTORY_MAX);
+    if (n == SIZE_MAX) {
+        return send_json(req, "{\"batches\":[],\"busy\":true}");
+    }
     /* Bound: ~200 bytes × 8 ≈ 1.6 KB */
     char buf[2048];
     size_t off = 0;
@@ -306,7 +313,10 @@ static esp_err_t handle_api_faults(httpd_req_t *req)
 {
     const system_status_t *st = status_snap();
     logger_alarm_t alarms[LOGGER_ALARM_MAX] {};
-    const size_t n = logger_copy_alarms(alarms, LOGGER_ALARM_MAX);
+    size_t n = logger_copy_alarms(alarms, LOGGER_ALARM_MAX);
+    if (n == SIZE_MAX) {
+        n = 0;
+    }
     const fault_code_t active =
         st ? (fault_code_t)st->active_fault : FAULT_NONE;
 

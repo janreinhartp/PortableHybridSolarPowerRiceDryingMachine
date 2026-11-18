@@ -29,7 +29,6 @@ esp_err_t actuator_manager_force_heater_off(void);
 
 esp_err_t actuator_manager_open_door(void);
 esp_err_t actuator_manager_close_door(void);
-esp_err_t actuator_manager_stop_door(void);
 esp_err_t actuator_manager_all_off(void);
 
 void actuator_manager_get_state(relay_state_t *out_state);

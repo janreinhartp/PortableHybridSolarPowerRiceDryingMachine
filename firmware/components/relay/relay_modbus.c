@@ -117,12 +117,12 @@ esp_err_t relay_modbus_refresh(relay_state_t *out_state)
     s_state.online = true;
     apply_regs(regs);
 
-    if (s_state.door_open && s_state.door_close) {
-        ESP_LOGE(TAG, "R4 and R5 both ON — forcing both OFF");
-        set_channel(RELAY_CH_DOOR_OPEN, false);
-        set_channel(RELAY_CH_DOOR_CLOSE, false);
-        s_state.door_open = false;
-        s_state.door_close = false;
+    /* Door is a single level trigger on R4. R5 must stay off. */
+    if (s_state.door_close) {
+        ESP_LOGW(TAG, "R5 close coil on — forcing OFF (door trigger is R4)");
+        if (set_channel(RELAY_CH_DOOR_CLOSE, false) == ESP_OK) {
+            s_state.door_close = false;
+        }
     }
 
     if (out_state) {
@@ -178,21 +178,7 @@ esp_err_t relay_modbus_open_door(void)
 
 esp_err_t relay_modbus_close_door(void)
 {
-    esp_err_t err = set_channel(RELAY_CH_DOOR_OPEN, false);
-    if (err != ESP_OK) {
-        return err;
-    }
-    s_state.door_open = false;
-    err = set_channel(RELAY_CH_DOOR_CLOSE, true);
-    if (err == ESP_OK) {
-        s_state.door_close = true;
-        s_state.online = true;
-    }
-    return err;
-}
-
-esp_err_t relay_modbus_stop_door(void)
-{
+    /* Off closes. Never energize R5. */
     esp_err_t e1 = set_channel(RELAY_CH_DOOR_OPEN, false);
     esp_err_t e2 = set_channel(RELAY_CH_DOOR_CLOSE, false);
     if (e1 == ESP_OK && e2 == ESP_OK) {

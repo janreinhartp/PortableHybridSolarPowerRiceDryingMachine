@@ -1,6 +1,6 @@
 #include "manual_screen.h"
 
-#include <cstdio>
+#include <cstring>
 
 #include "process_controller.h"
 #include "screen_common.h"
@@ -166,16 +166,33 @@ void manual_update(const system_status_t *status)
         s_heater ? "ON" : "OFF",
         s_fan ? "ON" : "OFF",
         s_elev ? "RUNNING" : "OFF",
-        ui_door_text(status->relay_door_open, status->relay_door_close),
+        ui_door_text(status->relay_door_open),
     };
     const bool active[4] = {s_heater, s_fan, s_elev, status->relay_door_open};
+    static uint8_t s_last_bits = 0xFF;
+    uint8_t bits = 0;
+    for (int i = 0; i < 4; ++i) {
+        if (active[i]) {
+            bits = (uint8_t)(bits | (1u << i));
+        }
+    }
+    const bool bits_changed = (bits != s_last_bits);
+    s_last_bits = bits;
     for (int i = 0; i < 4; ++i) {
         if (s_status_lbls[i] != nullptr) {
-            ui_label_set_text_if_changed(s_status_lbls[i], texts[i]);
-            lv_obj_set_style_text_color(
-                s_status_lbls[i], ui_theme_color(active[i] ? UI_COLOR_TEAL : UI_COLOR_DIM), 0);
+            const char *cur = lv_label_get_text(s_status_lbls[i]);
+            if (cur == nullptr || strcmp(cur, texts[i]) != 0) {
+                lv_label_set_text(s_status_lbls[i], texts[i]);
+                lv_obj_set_style_text_color(
+                    s_status_lbls[i], ui_theme_color(active[i] ? UI_COLOR_TEAL : UI_COLOR_DIM),
+                    0);
+            } else if (bits_changed) {
+                lv_obj_set_style_text_color(
+                    s_status_lbls[i], ui_theme_color(active[i] ? UI_COLOR_TEAL : UI_COLOR_DIM),
+                    0);
+            }
         }
-        if (s_leds[i] != nullptr) {
+        if (s_leds[i] != nullptr && bits_changed) {
             lv_obj_set_style_bg_color(
                 s_leds[i], ui_theme_color(active[i] ? UI_COLOR_TEAL : UI_COLOR_BORDER), 0);
         }

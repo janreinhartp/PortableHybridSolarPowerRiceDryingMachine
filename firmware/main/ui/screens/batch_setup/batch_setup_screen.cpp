@@ -42,7 +42,7 @@ static void on_resume(lv_event_t *e)
         ui_manager_set_banner("Batch Resumed");
         ui_manager_navigate(UI_SCREEN_RUN);
     } else {
-        ui_manager_set_banner("Resume Blocked — Check Sensors");
+        ui_manager_set_banner("Resume Blocked - Check Sensors");
     }
 }
 
@@ -88,7 +88,7 @@ void batch_setup_build(lv_obj_t *parent, const system_status_t *status)
     lv_obj_set_pos(title, 0, 0);
 
     static const char *names[10] = {
-        "Target Moisture", "Drying Temp",  "Cooling Temp", "Max Hot Air",
+        "Target Moisture", "Hot Air Temp",  "Cooling Temp", "Max Hot Air",
         "Circulation",     "Circ Interval", "Circ Run",     "Discharge",
         "Min Drying",      "Max Drying",
     };

@@ -9,9 +9,11 @@
 extern "C" {
 #endif
 
-/** Product Modbus IDs for XY-MD03 probes (set via holding reg 0x0101). */
-#define TH_SENSOR_HOTAIR_ADDR   1
-#define TH_SENSOR_CHAMBER_ADDR  2
+/** Product Modbus IDs for XY-MD03 probes (set via holding reg 0x0101).
+ *  Probes were installed opposite the original plan, so address 1 is the
+ *  chamber probe and address 2 is the hot-air probe. */
+#define TH_SENSOR_HOTAIR_ADDR   2
+#define TH_SENSOR_CHAMBER_ADDR  1
 
 #define TH_REG_TEMP             0x0001
 #define TH_REG_HUMIDITY         0x0002

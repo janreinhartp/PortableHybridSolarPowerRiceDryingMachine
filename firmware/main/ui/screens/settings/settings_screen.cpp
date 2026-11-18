@@ -36,6 +36,7 @@ static dryer_settings_t s_draft {};
 static adjust_arg_t s_args[F_COUNT][2] = {};
 static lv_obj_t *s_values[F_COUNT] = {};
 static lv_obj_t *s_save = nullptr;
+static lv_obj_t *s_calibrate = nullptr;
 
 static uint32_t step_u32(uint32_t value, int delta, uint32_t min_v)
 {
@@ -57,8 +58,8 @@ static void clamp_draft(void)
     if (s_draft.drying_temperature_c < 20.0f) {
         s_draft.drying_temperature_c = 20.0f;
     }
-    if (s_draft.drying_temperature_c > 65.0f) {
-        s_draft.drying_temperature_c = 65.0f;
+    if (s_draft.drying_temperature_c > 80.0f) {
+        s_draft.drying_temperature_c = 80.0f;
     }
     if (s_draft.cooling_temperature_c < 10.0f) {
         s_draft.cooling_temperature_c = 10.0f;
@@ -96,8 +97,8 @@ static void clamp_draft(void)
     if (s_draft.max_hot_air_temperature_c <= s_draft.drying_temperature_c) {
         s_draft.max_hot_air_temperature_c = s_draft.drying_temperature_c + 1.0f;
     }
-    if (s_draft.max_hot_air_temperature_c > 90.0f) {
-        s_draft.max_hot_air_temperature_c = 90.0f;
+    if (s_draft.max_hot_air_temperature_c > 110.0f) {
+        s_draft.max_hot_air_temperature_c = 110.0f;
     }
     if (s_draft.circulation_interval_s < 2) {
         s_draft.circulation_interval_s = 2;
@@ -222,6 +223,36 @@ static void on_save(lv_event_t *e)
     }
 }
 
+static void on_calibrate(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
+        return;
+    }
+    clamp_draft();
+    if (s_draft.drying_temperature_c > 70.0f) {
+        ui_manager_set_banner("Set Hot Air Temp To 70 C Or Below, Then Calibrate");
+        render_values();
+        return;
+    }
+    const esp_err_t saved = process_controller_save_settings(&s_draft);
+    if (saved != ESP_OK) {
+        ui_manager_set_banner(saved == ESP_ERR_INVALID_STATE
+                                  ? "Save Blocked While A Batch Is Running"
+                                  : "Settings Rejected - Check The Ranges");
+        return;
+    }
+    const esp_err_t err = process_controller_start_pid_cal();
+    if (err == ESP_ERR_INVALID_ARG) {
+        ui_manager_set_banner("Set Hot Air Temp To 70 C Or Below, Then Calibrate");
+        return;
+    }
+    if (err != ESP_OK) {
+        ui_manager_set_banner("Calibration Needs Idle And Live Sensors");
+        return;
+    }
+    ui_manager_navigate(UI_SCREEN_PID_CAL);
+}
+
 static void on_defaults(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
@@ -237,6 +268,7 @@ void settings_detach(void)
 {
     s_alive = false;
     s_save = nullptr;
+    s_calibrate = nullptr;
     for (int i = 0; i < F_COUNT; ++i) {
         s_values[i] = nullptr;
     }
@@ -249,19 +281,18 @@ void settings_build(lv_obj_t *parent, const system_status_t *status)
     clamp_draft();
 
     static const char *names[F_COUNT] = {
-        "Target Moisture", "Drying Temp",   "Cooling Temp", "PID Kp",
-        "PID Ki",          "PID Kd",        "PID Window",   "Circulation",
-        "Circ Interval",   "Circ Run",      "Discharge",    "Min Drying",
-        "Max Drying",      "Max Hot Air",
+        "Target Moisture", "Hot Air Temp", "Cooling Temp", "PID Kp", "PID Ki",
+        "PID Kd",          "PID Window",  "Circulation",  "Circ Interval", "Circ Run",
+        "Discharge",       "Min Drying",  "Max Drying",   "Max Hot Air",
     };
 
     lv_obj_t *title = ui_theme_make_label(parent, "Settings", ui_font_title(), UI_COLOR_TEXT);
     lv_obj_set_pos(title, 0, 0);
 
-    /* Non-scrollable grid: 5×3 denser cards fit above Defaults/Save. */
+    /* Five rows of cards sit above Defaults / Calibrate / Save. */
     lv_obj_t *grid = lv_obj_create(parent);
-    lv_obj_set_size(grid, 992, 280);
-    lv_obj_set_pos(grid, 0, 40);
+    lv_obj_set_size(grid, 992, 275);
+    lv_obj_set_pos(grid, 0, 32);
     lv_obj_set_style_bg_opa(grid, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(grid, 0, 0);
     lv_obj_set_style_pad_all(grid, 0, 0);
@@ -269,13 +300,14 @@ void settings_build(lv_obj_t *parent, const system_status_t *status)
     lv_obj_set_scrollbar_mode(grid, LV_SCROLLBAR_MODE_OFF);
 
     const lv_coord_t card_w = 320;
-    const lv_coord_t card_h = 52;
+    const lv_coord_t card_h = 50;
     const lv_coord_t gap = 16;
-    const lv_coord_t row_pitch = 56;
+    const lv_coord_t row_pitch = 55;
     for (int i = 0; i < F_COUNT; ++i) {
         const int row = i / 3;
         const int col = i % 3;
         lv_obj_t *card = ui_theme_make_card(grid, card_w, card_h);
+        lv_obj_set_style_pad_all(card, 4, 0);
         lv_obj_set_pos(card, (lv_coord_t)(col * (card_w + gap)),
                        (lv_coord_t)(row * row_pitch));
         lv_obj_t *name = ui_theme_make_label(card, names[i], ui_font_caption(), UI_COLOR_MUTED);
@@ -287,22 +319,25 @@ void settings_build(lv_obj_t *parent, const system_status_t *status)
         s_args[i][1].sign = 1;
 
         lv_obj_t *down =
-            ui_theme_make_btn(card, "-", on_adjust, &s_args[i][0], 36, 36, UI_COLOR_SURFACE_ALT);
+            ui_theme_make_btn(card, "-", on_adjust, &s_args[i][0], 32, 32, UI_COLOR_SURFACE_ALT);
         lv_obj_align(down, LV_ALIGN_RIGHT_MID, -108, 0);
         s_values[i] = ui_theme_make_label(card, "", ui_font_body(), UI_COLOR_CREAM);
         lv_obj_set_width(s_values[i], 64);
         lv_label_set_long_mode(s_values[i], LV_LABEL_LONG_CLIP);
         lv_obj_align(s_values[i], LV_ALIGN_RIGHT_MID, -48, 0);
         lv_obj_t *up =
-            ui_theme_make_btn(card, "+", on_adjust, &s_args[i][1], 36, 36, UI_COLOR_SURFACE_ALT);
+            ui_theme_make_btn(card, "+", on_adjust, &s_args[i][1], 32, 32, UI_COLOR_SURFACE_ALT);
         lv_obj_align(up, LV_ALIGN_RIGHT_MID, 0, 0);
     }
 
     lv_obj_t *defaults =
-        ui_theme_make_btn(parent, "Defaults", on_defaults, nullptr, 488, 56, UI_COLOR_SURFACE_ALT);
-    lv_obj_set_pos(defaults, 0, 332);
-    s_save = ui_theme_make_btn(parent, "Save", on_save, nullptr, 488, 56, UI_COLOR_TEAL);
-    lv_obj_set_pos(s_save, 504, 332);
+        ui_theme_make_btn(parent, "Defaults", on_defaults, nullptr, 320, 48, UI_COLOR_SURFACE_ALT);
+    lv_obj_set_pos(defaults, 0, 316);
+    s_calibrate = ui_theme_make_btn(parent, "Calibrate PID", on_calibrate, nullptr, 320, 48,
+                                    UI_COLOR_SURFACE_ALT);
+    lv_obj_set_pos(s_calibrate, 336, 316);
+    s_save = ui_theme_make_btn(parent, "Save", on_save, nullptr, 320, 48, UI_COLOR_TEAL);
+    lv_obj_set_pos(s_save, 672, 316);
 
     s_alive = true;
     render_values();
@@ -315,9 +350,17 @@ void settings_update(const system_status_t *status)
     if (!s_alive || s_save == nullptr) {
         return;
     }
-    if (process_controller_settings_editable()) {
+    const bool editable = process_controller_settings_editable() &&
+                          !process_controller_pid_cal_active();
+    if (editable) {
         lv_obj_clear_state(s_save, LV_STATE_DISABLED);
+        if (s_calibrate != nullptr) {
+            lv_obj_clear_state(s_calibrate, LV_STATE_DISABLED);
+        }
     } else {
         lv_obj_add_state(s_save, LV_STATE_DISABLED);
+        if (s_calibrate != nullptr) {
+            lv_obj_add_state(s_calibrate, LV_STATE_DISABLED);
+        }
     }
 }

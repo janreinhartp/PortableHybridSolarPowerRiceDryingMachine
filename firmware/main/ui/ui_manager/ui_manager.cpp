@@ -1,6 +1,7 @@
 #include "ui_manager.h"
 
 #include <cstdio>
+#include <cstring>
 
 #include "alarms_screen.h"
 #include "batch_setup_screen.h"
@@ -13,6 +14,7 @@
 #include "lvgl.h"
 #include "manual_screen.h"
 #include "more_screen.h"
+#include "pid_cal_screen.h"
 #include "process_controller.h"
 #include "run_screen.h"
 #include "safety_manager.h"
@@ -36,7 +38,7 @@ static lv_obj_t *s_content = nullptr;
 static lv_obj_t *s_nav_bar = nullptr;
 static lv_obj_t *s_nav[4] = {};
 static lv_obj_t *s_nav_lbl[4] = {};
-static ui_screen_t s_screen = UI_SCREEN_DASHBOARD;
+static ui_screen_t s_screen = (ui_screen_t)0xFF; /* invalid until first navigate */
 static uint8_t s_seen_state = 0xFF;
 static system_status_t s_status {};
 static unsigned s_taps = 0;
@@ -81,15 +83,22 @@ static void refresh_header_phase(const system_status_t *status)
     }
     if (s_ephemeral_active) {
         if (status->dryer_state == s_ephemeral_state && s_ephemeral[0] != '\0') {
-            ui_label_set_text_if_changed(s_phase, s_ephemeral);
-            lv_obj_set_style_text_color(s_phase, ui_theme_color(UI_COLOR_AMBER), 0);
+            const char *cur = lv_label_get_text(s_phase);
+            if (cur == nullptr || strcmp(cur, s_ephemeral) != 0) {
+                lv_label_set_text(s_phase, s_ephemeral);
+                lv_obj_set_style_text_color(s_phase, ui_theme_color(UI_COLOR_AMBER), 0);
+            }
             return;
         }
         s_ephemeral_active = false;
         s_ephemeral[0] = '\0';
     }
-    ui_label_set_text_if_changed(s_phase, phase_text_for(status));
-    lv_obj_set_style_text_color(s_phase, ui_theme_color(UI_COLOR_MUTED), 0);
+    const char *phase = phase_text_for(status);
+    const char *cur = lv_label_get_text(s_phase);
+    if (cur == nullptr || strcmp(cur, phase) != 0) {
+        lv_label_set_text(s_phase, phase);
+        lv_obj_set_style_text_color(s_phase, ui_theme_color(UI_COLOR_MUTED), 0);
+    }
 }
 
 static void layout_content(bool fault_visible)
@@ -147,6 +156,7 @@ static bool screen_follows_process(ui_screen_t screen)
     case UI_SCREEN_COMMISSION:
     case UI_SCREEN_CALIBRATE_MOISTURE:
     case UI_SCREEN_SET_CLOCK:
+    case UI_SCREEN_PID_CAL:
         return false;
     default:
         return true;
@@ -168,6 +178,7 @@ static void detach_all(void)
     commission_detach();
     calibrate_moisture_detach();
     set_clock_detach();
+    pid_cal_detach();
 }
 
 static void highlight_nav(void)
@@ -186,7 +197,8 @@ static void highlight_nav(void)
             on = (s_screen == UI_SCREEN_MORE || s_screen == UI_SCREEN_MANUAL ||
                   s_screen == UI_SCREEN_SETTINGS || s_screen == UI_SCREEN_HISTORY ||
                   s_screen == UI_SCREEN_SYSTEM || s_screen == UI_SCREEN_COMMISSION ||
-                  s_screen == UI_SCREEN_CALIBRATE_MOISTURE || s_screen == UI_SCREEN_SET_CLOCK);
+                  s_screen == UI_SCREEN_CALIBRATE_MOISTURE || s_screen == UI_SCREEN_SET_CLOCK ||
+                  s_screen == UI_SCREEN_PID_CAL);
         } else {
             on = (s_screen == mapped[i]);
         }
@@ -241,12 +253,21 @@ static void update_active(void)
     case UI_SCREEN_SET_CLOCK:
         set_clock_update(&s_status);
         break;
+    case UI_SCREEN_PID_CAL:
+        pid_cal_update(&s_status);
+        break;
     }
 }
 
 void ui_manager_navigate(ui_screen_t screen)
 {
     if (s_content == nullptr) {
+        return;
+    }
+    /* Same screen: never lv_obj_clean — that is the main HMI flicker source. */
+    if (screen == s_screen) {
+        highlight_nav();
+        update_active();
         return;
     }
     detach_all();
@@ -293,6 +314,9 @@ void ui_manager_navigate(ui_screen_t screen)
         break;
     case UI_SCREEN_SET_CLOCK:
         set_clock_build(s_content, &s_status);
+        break;
+    case UI_SCREEN_PID_CAL:
+        pid_cal_build(s_content, &s_status);
         break;
     }
 }
@@ -345,6 +369,10 @@ void ui_manager_show_hmi(const system_status_t *status)
     s_taps = s_tap_counter != nullptr ? *s_tap_counter : 0;
 
     lv_obj_t *scr = lv_scr_act();
+    if (scr == nullptr) {
+        scr = lv_obj_create(nullptr);
+        lv_scr_load(scr);
+    }
     lv_obj_clean(scr);
     ui_theme_apply_screen(scr);
 

@@ -40,7 +40,6 @@ typedef struct {
     bool relay_heater;
     bool relay_fan;
     bool relay_door_open;
-    bool relay_door_close;
 
     /* Phase 5 — safety / settings / circulation summary for HMI */
     bool heating_permitted;
@@ -92,6 +91,12 @@ typedef struct {
     /* Phase 8 — local Wi-Fi SoftAP dashboard */
     bool wifi_ok;
     char wifi_ssid[32];
+
+    /* On-machine chamber PID autotune. Not a batch. */
+    bool pid_cal_active;
+    uint8_t pid_cal_cycles;
+    float pid_cal_setpoint_c;
+    char pid_cal_note[40];
 } system_status_t;
 
 #ifdef __cplusplus

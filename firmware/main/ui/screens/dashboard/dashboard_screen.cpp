@@ -35,7 +35,7 @@ static void on_resume(lv_event_t *e)
         ui_manager_set_banner("Batch Resumed");
         ui_manager_navigate(UI_SCREEN_RUN);
     } else {
-        ui_manager_set_banner("Resume Blocked — Check Sensors");
+        ui_manager_set_banner("Resume Blocked - Check Sensors");
     }
 }
 
@@ -121,7 +121,7 @@ void dashboard_update(const system_status_t *status)
 
     if (status->hotair_ok) {
         snprintf(value, sizeof(value), "%.1f", status->hotair_temp_c);
-        snprintf(detail, sizeof(detail), "Cap %.0f °C", status->max_hot_air_temperature_c);
+        snprintf(detail, sizeof(detail), "Target %.0f °C", status->drying_temperature_c);
     } else {
         snprintf(value, sizeof(value), "Offline");
         snprintf(detail, sizeof(detail), "Sensor unavailable");
@@ -130,7 +130,11 @@ void dashboard_update(const system_status_t *status)
 
     if (status->chamber_ok) {
         snprintf(value, sizeof(value), "%.1f", status->chamber_temp_c);
-        snprintf(detail, sizeof(detail), "Target %.0f °C", status->drying_temperature_c);
+        if (status->dryer_state == DRYER_STATE_COOLING) {
+            snprintf(detail, sizeof(detail), "Target %.0f °C", status->cooling_temperature_c);
+        } else {
+            snprintf(detail, sizeof(detail), "Current");
+        }
     } else {
         snprintf(value, sizeof(value), "Offline");
         snprintf(detail, sizeof(detail), "Sensor unavailable");

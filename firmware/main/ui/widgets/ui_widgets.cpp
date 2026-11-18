@@ -35,13 +35,29 @@ void ui_metric_set(ui_metric_t *m, const char *value, const char *unit, const ch
     if (m == nullptr || m->value_lbl == nullptr) {
         return;
     }
-    ui_label_set_text_if_changed(m->value_lbl, value != nullptr ? value : "-");
+    const char *next_val = value != nullptr ? value : "-";
+    const char *cur_val = lv_label_get_text(m->value_lbl);
+    const bool value_changed = (cur_val == nullptr || strcmp(cur_val, next_val) != 0);
+    if (value_changed) {
+        lv_label_set_text(m->value_lbl, next_val);
+    }
     if (m->unit_lbl != nullptr) {
-        ui_label_set_text_if_changed(m->unit_lbl, unit != nullptr ? unit : "");
-        if (unit != nullptr && unit[0] != '\0') {
-            lv_obj_align_to(m->unit_lbl, m->value_lbl, LV_ALIGN_OUT_RIGHT_BOTTOM, 6, 0);
-            lv_obj_clear_flag(m->unit_lbl, LV_OBJ_FLAG_HIDDEN);
-        } else {
+        const char *next_unit = unit != nullptr ? unit : "";
+        const char *cur_unit = lv_label_get_text(m->unit_lbl);
+        const bool unit_changed = (cur_unit == nullptr || strcmp(cur_unit, next_unit) != 0);
+        if (unit_changed) {
+            lv_label_set_text(m->unit_lbl, next_unit);
+        }
+        const bool show = next_unit[0] != '\0';
+        const bool was_hidden = lv_obj_has_flag(m->unit_lbl, LV_OBJ_FLAG_HIDDEN);
+        if (show) {
+            if (value_changed || unit_changed || was_hidden) {
+                lv_obj_align_to(m->unit_lbl, m->value_lbl, LV_ALIGN_OUT_RIGHT_BOTTOM, 6, 0);
+            }
+            if (was_hidden) {
+                lv_obj_clear_flag(m->unit_lbl, LV_OBJ_FLAG_HIDDEN);
+            }
+        } else if (!was_hidden) {
             lv_obj_add_flag(m->unit_lbl, LV_OBJ_FLAG_HIDDEN);
         }
     }
@@ -132,12 +148,22 @@ void ui_bar_gauge_set_target(ui_bar_gauge_t *g, bool show, float target)
         return;
     }
     if (!show) {
-        lv_obj_add_flag(g->target_lbl, LV_OBJ_FLAG_HIDDEN);
-        if (g->marker != nullptr) {
-            lv_obj_add_flag(g->marker, LV_OBJ_FLAG_HIDDEN);
+        if (g->target_shown) {
+            lv_obj_add_flag(g->target_lbl, LV_OBJ_FLAG_HIDDEN);
+            if (g->marker != nullptr) {
+                lv_obj_add_flag(g->marker, LV_OBJ_FLAG_HIDDEN);
+            }
+            g->target_shown = false;
         }
         return;
     }
+    const bool target_changed = !g->target_shown || (g->last_target != target);
+    if (!target_changed) {
+        return;
+    }
+    g->target_shown = true;
+    g->last_target = target;
+
     char buf[36];
     if (g->unit[0] != '\0') {
         snprintf(buf, sizeof(buf), "Target %.1f %s", target, g->unit);
@@ -235,16 +261,54 @@ void ui_trend_refresh(ui_trend_t *t)
     if (t == nullptr || t->chart == nullptr) {
         return;
     }
-    float moist[TREND_POINTS];
-    float chamber[TREND_POINTS];
-    const size_t n = trend_buffer_copy(moist, chamber, nullptr, TREND_POINTS);
-    lv_chart_set_all_value(t->chart, t->ser_moist, LV_CHART_POINT_NONE);
-    lv_chart_set_all_value(t->chart, t->ser_chamber, LV_CHART_POINT_NONE);
-    for (size_t i = 0; i < n; ++i) {
-        lv_chart_set_next_value(t->chart, t->ser_moist, (lv_coord_t)(moist[i] + 0.5f));
-        lv_chart_set_next_value(t->chart, t->ser_chamber, (lv_coord_t)(chamber[i] + 0.5f));
+    const trend_buffer_t *buf = trend_buffer_get();
+    if (buf == nullptr || buf->count == 0) {
+        return;
     }
-    lv_chart_refresh(t->chart);
+    /* Skip when buffer unchanged — avoids full-chart invalidate every tick. */
+    if (t->seeded && t->synced_head == buf->head && t->synced_count == buf->count) {
+        return;
+    }
+
+    if (!t->seeded || buf->count < t->synced_count) {
+        float moist[TREND_POINTS];
+        float chamber[TREND_POINTS];
+        const size_t n = trend_buffer_copy(moist, chamber, nullptr, TREND_POINTS);
+        lv_chart_set_all_value(t->chart, t->ser_moist, LV_CHART_POINT_NONE);
+        lv_chart_set_all_value(t->chart, t->ser_chamber, LV_CHART_POINT_NONE);
+        for (size_t i = 0; i < n; ++i) {
+            lv_chart_set_next_value(t->chart, t->ser_moist, (lv_coord_t)(moist[i] + 0.5f));
+            lv_chart_set_next_value(t->chart, t->ser_chamber, (lv_coord_t)(chamber[i] + 0.5f));
+        }
+        t->seeded = true;
+        t->synced_head = buf->head;
+        t->synced_count = buf->count;
+        return;
+    }
+
+    /* Incremental: append only samples added since last sync (usually 1 at 1 Hz). */
+    size_t pending = 0;
+    if (buf->count > t->synced_count) {
+        pending = buf->count - t->synced_count;
+    } else if (buf->head != t->synced_head) {
+        pending = (buf->head + TREND_POINTS - t->synced_head) % TREND_POINTS;
+        if (pending == 0) {
+            pending = TREND_POINTS;
+        }
+    }
+    if (pending > TREND_POINTS) {
+        pending = TREND_POINTS;
+    }
+    for (size_t i = 0; i < pending; ++i) {
+        const size_t idx =
+            (t->synced_head + i) % TREND_POINTS;
+        lv_chart_set_next_value(t->chart, t->ser_moist,
+                                (lv_coord_t)(buf->moisture[idx] + 0.5f));
+        lv_chart_set_next_value(t->chart, t->ser_chamber,
+                                (lv_coord_t)(buf->chamber_c[idx] + 0.5f));
+    }
+    t->synced_head = buf->head;
+    t->synced_count = buf->count;
 }
 
 static void fill_actuator_card(lv_obj_t *card, lv_obj_t **led, lv_obj_t **status,
@@ -261,9 +325,14 @@ static void fill_actuator_card(lv_obj_t *card, lv_obj_t **led, lv_obj_t **status
     *status = ui_theme_make_label(card, "OFF", ui_font_body(), UI_COLOR_DIM);
 
     if (horizontal) {
-        lv_obj_align(*label, LV_ALIGN_LEFT_MID, 0, 0);
+        /* Dot stays left of the title so long status text (RUNNING/CLOSED)
+         * cannot push it into the name. */
+        lv_obj_align(*led, LV_ALIGN_LEFT_MID, 0, 0);
+        lv_obj_align_to(*label, *led, LV_ALIGN_OUT_RIGHT_MID, 8, 0);
+        lv_label_set_long_mode(*label, LV_LABEL_LONG_CLIP);
+        lv_obj_set_style_max_width(*label, 110, 0);
         lv_obj_align(*status, LV_ALIGN_RIGHT_MID, 0, 0);
-        lv_obj_align_to(*led, *status, LV_ALIGN_OUT_LEFT_MID, -8, 0);
+        lv_label_set_long_mode(*status, LV_LABEL_LONG_CLIP);
     } else {
         lv_obj_align(*label, LV_ALIGN_TOP_LEFT, 0, 0);
         lv_obj_align(*led, LV_ALIGN_BOTTOM_LEFT, 0, -4);
@@ -309,6 +378,18 @@ void ui_leds_set(ui_actuator_leds_t *leds, const system_status_t *status)
         status->relay_elevator,
         status->relay_door_open,
     };
+    uint8_t bits = 0;
+    for (int i = 0; i < 4; ++i) {
+        if (on[i]) {
+            bits = (uint8_t)(bits | (1u << i));
+        }
+    }
+    if (leds->have_last && leds->last_bits == bits) {
+        return;
+    }
+    leds->have_last = true;
+    leds->last_bits = bits;
+
     const char *text[4] = {
         on[0] ? "ON" : "OFF",
         on[1] ? "ON" : "OFF",
@@ -318,7 +399,7 @@ void ui_leds_set(ui_actuator_leds_t *leds, const system_status_t *status)
     const uint32_t colors[4] = {UI_COLOR_HEATER, UI_COLOR_TEAL_SOFT, UI_COLOR_TEAL_SOFT,
                                 UI_COLOR_DIM};
     for (int i = 0; i < 4; ++i) {
-        const bool active = (i == 3) ? status->relay_door_open : on[i];
+        const bool active = on[i];
         const uint32_t c = active ? colors[i] : (uint32_t)UI_COLOR_DIM;
         if (leds->leds[i] != nullptr) {
             lv_obj_set_style_bg_color(

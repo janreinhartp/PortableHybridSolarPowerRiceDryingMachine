@@ -50,12 +50,28 @@ typedef enum {
 static discharge_step_t s_discharge_step = DISCHARGE_OPEN_DOOR;
 static int64_t s_discharge_step_us = 0;
 static const uint32_t k_door_settle_s = 5;
-/* Open-loop max door travel (no ESP32 limit-switch feedback). */
-static const uint32_t k_door_max_travel_s = 30;
 /* Elevator ON grace beyond configured run/discharge time (stuck-on detection). */
 static const uint32_t k_elevator_grace_s = 15;
-static int64_t s_door_cmd_us = 0;
 static int64_t s_elevator_cmd_us = 0;
+
+static const float k_pid_hyst_c = 0.5f;
+static const float k_pid_abort_c = 80.0f;
+static const float k_pid_max_setpoint_c = 70.0f;
+static const uint32_t k_pid_cal_max_s = 45u * 60u;
+static bool s_pid_cal_active = false;
+static bool s_pid_cal_heater = false;
+static int s_pid_cal_phase = 0;
+static int s_pid_cal_cycles = 0;
+static int64_t s_pid_cal_start_us = 0;
+static int64_t s_pid_cal_edge_us = 0;
+static float s_pid_cal_sp = 0.0f;
+static float s_pid_cal_peak_hi = 0.0f;
+static float s_pid_cal_peak_lo = 0.0f;
+static bool s_pid_cal_have_ext = false;
+static float s_pid_cal_amp_sum = 0.0f;
+static float s_pid_cal_tu_sum = 0.0f;
+static char s_pid_cal_note[40] = {};
+
 static uint8_t s_discharge_phase_pub = 0;
 static uint32_t s_discharge_remaining_pub = 0;
 
@@ -277,9 +293,8 @@ static void enter_fault(fault_code_t code, const sensor_data_t *sensors,
     safety_manager_request_heater(false);
     s_heater_on = false;
     reset_heater_pid();
-    actuator_manager_stop_door();
+    actuator_manager_close_door();
     actuator_manager_set_elevator(false);
-    s_door_cmd_us = 0;
     s_elevator_cmd_us = 0;
     queue_sample(s_state, sensors, status);
     enqueue_summary("FAULT", sensors, status);
@@ -287,10 +302,10 @@ static void enter_fault(fault_code_t code, const sensor_data_t *sensors,
 }
 
 /**
- * F007 / F008 without position feedback: command-duration watchdogs.
+ * F007 without position feedback: elevator command-duration watchdog.
+ * The door is a held R4 level (on = open). Its own end switches stop travel,
+ * so a coil-on timer must not raise F008.
  * Continuous drying circulation may keep the elevator ON indefinitely (locked).
- * F008 only during DISCHARGING travel (OPEN settle / CLOSE) — not while DRYING
- * holds the door closed for the whole batch.
  * Elevator ON longer than max(run, discharge) + grace raises F007.
  */
 static bool check_actuator_timeouts(const sensor_data_t *sensors,
@@ -299,7 +314,6 @@ static bool check_actuator_timeouts(const sensor_data_t *sensors,
 {
     if (s_state == DRYER_STATE_IDLE || s_state == DRYER_STATE_COMPLETE ||
         s_state == DRYER_STATE_FAULT) {
-        s_door_cmd_us = 0;
         s_elevator_cmd_us = 0;
         return false;
     }
@@ -307,24 +321,6 @@ static bool check_actuator_timeouts(const sensor_data_t *sensors,
     relay_state_t coils {};
     actuator_manager_get_state(&coils);
     const int64_t now = esp_timer_get_time();
-
-    /* Door travel watchdog only while discharging (open/close moves). */
-    const bool door_travel =
-        s_state == DRYER_STATE_DISCHARGING &&
-        (s_discharge_step == DISCHARGE_SETTLE ||
-         s_discharge_step == DISCHARGE_CLOSE_DOOR ||
-         s_discharge_step == DISCHARGE_OPEN_DOOR) &&
-        (coils.door_open || coils.door_close);
-    if (door_travel) {
-        if (s_door_cmd_us == 0) {
-            s_door_cmd_us = now;
-        } else if (elapsed_s(s_door_cmd_us) >= k_door_max_travel_s) {
-            enter_fault(FAULT_F008_DOOR_TIMEOUT, sensors, status);
-            return true;
-        }
-    } else {
-        s_door_cmd_us = 0;
-    }
 
     const bool continuous_ok =
         settings->circulation_mode == CIRCULATION_MODE_CONTINUOUS &&
@@ -351,7 +347,7 @@ static bool check_actuator_timeouts(const sensor_data_t *sensors,
     return false;
 }
 
-/* Chamber PID → duty; time-proportioned ON/OFF; hot-air hard cap. */
+/* Hot-air PID → duty; time-proportioned ON/OFF; hot-air hard cap. */
 static float s_pid_integral = 0.0f;
 static float s_pid_prev_err = 0.0f;
 static int64_t s_pid_window_start_us = 0;
@@ -369,7 +365,7 @@ static void reset_heater_pid(void)
 
 static void apply_heater_pid(const sensor_data_t *sensors, const dryer_settings_t *settings)
 {
-    if (!sensors->chamber_temp_valid) {
+    if (!sensors->hot_air_temp_valid) {
         safety_manager_request_heater(false);
         s_heater_on = false;
         s_heater_duty_pub = 0.0f;
@@ -377,7 +373,7 @@ static void apply_heater_pid(const sensor_data_t *sensors, const dryer_settings_
     }
 
     const float sp = settings->drying_temperature_c;
-    const float pv = sensors->chamber_temperature;
+    const float pv = sensors->hot_air_temperature;
     const float err = sp - pv;
     const float dt = 1.0f; /* process tick ≈ 1 Hz */
 
@@ -532,6 +528,10 @@ void process_controller_fill_status(system_status_t *status)
     status->max_hot_air_temperature_c = cfg.max_hot_air_temperature_c;
     status->circulation_mode = (uint8_t)cfg.circulation_mode;
     status->heater_duty_pct = (s_state == DRYER_STATE_DRYING) ? s_heater_duty_pub : 0.0f;
+    status->pid_cal_active = s_pid_cal_active;
+    status->pid_cal_cycles = (uint8_t)s_pid_cal_cycles;
+    status->pid_cal_setpoint_c = s_pid_cal_active ? s_pid_cal_sp : 0.0f;
+    copy_str(status->pid_cal_note, sizeof(status->pid_cal_note), s_pid_cal_note);
 }
 
 static void publish(const sensor_data_t *sensors, const dryer_settings_t *settings,
@@ -586,8 +586,251 @@ esp_err_t process_controller_init(void)
     return ESP_OK;
 }
 
+static void pid_cal_outputs_safe(void)
+{
+    safety_manager_request_heater(false);
+    s_heater_on = false;
+    s_pid_cal_heater = false;
+    actuator_manager_set_elevator(false);
+    actuator_manager_close_door();
+    /* Over-temperature keeps the fan on. Other stops turn it off. */
+    safety_status_t safety {};
+    safety_manager_get_status(&safety);
+    if (safety.fan_forced_on) {
+        actuator_manager_set_fan(true);
+    } else {
+        actuator_manager_set_fan(false);
+    }
+}
+
+static void pid_cal_finish(const char *note)
+{
+    s_pid_cal_active = false;
+    copy_str(s_pid_cal_note, sizeof(s_pid_cal_note), note);
+    pid_cal_outputs_safe();
+}
+
+static void pid_cal_apply_heater(bool on)
+{
+    if (on == s_heater_on && on == s_pid_cal_heater) {
+        return;
+    }
+    if (on) {
+        if (safety_manager_request_heater(true) != ESP_OK) {
+            pid_cal_finish("Heater Blocked");
+            return;
+        }
+        s_heater_on = true;
+        s_pid_cal_heater = true;
+        return;
+    }
+    safety_manager_request_heater(false);
+    s_heater_on = false;
+    s_pid_cal_heater = false;
+}
+
+static void pid_cal_commit(const dryer_settings_t *settings)
+{
+    const float a = s_pid_cal_amp_sum / 2.0f;
+    const float tu = s_pid_cal_tu_sum / 2.0f;
+    if (a < 0.25f || tu < 2.0f) {
+        pid_cal_finish("Swing Too Small");
+        return;
+    }
+    const float ku = (4.0f * 50.0f) / (3.14159265f * a);
+    float kp = ku / 2.2f;
+    float ki = kp / (2.2f * tu);
+    float kd = (kp * tu) / 6.3f;
+    if (kp < 0.0f) {
+        kp = 0.0f;
+    } else if (kp > 100.0f) {
+        kp = 100.0f;
+    }
+    if (ki < 0.0f) {
+        ki = 0.0f;
+    } else if (ki > 10.0f) {
+        ki = 10.0f;
+    }
+    if (kd < 0.0f) {
+        kd = 0.0f;
+    } else if (kd > 100.0f) {
+        kd = 100.0f;
+    }
+
+    dryer_settings_t next = *settings;
+    next.pid_kp = kp;
+    next.pid_ki = ki;
+    next.pid_kd = kd;
+    if (settings_manager_save(&next) != ESP_OK) {
+        pid_cal_finish("Could Not Save Gains");
+        return;
+    }
+    char note[40];
+    snprintf(note, sizeof(note), "Saved Kp %.1f Ki %.2f Kd %.1f", (double)kp, (double)ki,
+             (double)kd);
+    pid_cal_finish(note);
+    ESP_LOGI(TAG, "PID autotune %s", s_pid_cal_note);
+}
+
+static void pid_cal_tick(const sensor_data_t *sensors, const dryer_settings_t *settings,
+                         system_status_t *status)
+{
+    if (elapsed_s(s_pid_cal_start_us) >= k_pid_cal_max_s) {
+        pid_cal_finish("Calibration Timed Out");
+        return;
+    }
+    if (status == nullptr || !status->relay_ok || !sensors->chamber_temp_valid ||
+        !sensors->hot_air_temp_valid) {
+        pid_cal_finish("Sensor Or Relay Lost");
+        return;
+    }
+    if (safety_manager_active_fault() != FAULT_NONE) {
+        pid_cal_finish("Stopped On Fault");
+        return;
+    }
+
+    const float pv = sensors->hot_air_temperature;
+    if (pv >= k_pid_abort_c) {
+        pid_cal_finish("Hot Air Reached 80 C");
+        return;
+    }
+    if (sensors->chamber_temp_valid && sensors->chamber_temperature >= k_pid_abort_c) {
+        pid_cal_finish("Chamber Reached 80 C");
+        return;
+    }
+    if (sensors->hot_air_temperature >= settings->max_hot_air_temperature_c) {
+        pid_cal_finish("Hot Air Cap");
+        return;
+    }
+
+    actuator_manager_close_door();
+    actuator_manager_set_elevator(false);
+    actuator_manager_set_fan(true);
+
+    if (s_pid_cal_phase == 0) {
+        if (pv >= s_pid_cal_sp + k_pid_hyst_c) {
+            pid_cal_apply_heater(false);
+            s_pid_cal_phase = 1;
+            s_pid_cal_edge_us = 0;
+            s_pid_cal_have_ext = false;
+        } else {
+            pid_cal_apply_heater(true);
+        }
+        return;
+    }
+
+    if (!s_pid_cal_have_ext) {
+        s_pid_cal_peak_hi = pv;
+        s_pid_cal_peak_lo = pv;
+        s_pid_cal_have_ext = true;
+    } else {
+        if (pv > s_pid_cal_peak_hi) {
+            s_pid_cal_peak_hi = pv;
+        }
+        if (pv < s_pid_cal_peak_lo) {
+            s_pid_cal_peak_lo = pv;
+        }
+    }
+
+    bool next_on = s_pid_cal_heater;
+    if (s_pid_cal_heater && pv >= s_pid_cal_sp + k_pid_hyst_c) {
+        next_on = false;
+    } else if (!s_pid_cal_heater && pv <= s_pid_cal_sp - k_pid_hyst_c) {
+        next_on = true;
+    }
+
+    if (next_on && !s_pid_cal_heater) {
+        const int64_t now = esp_timer_get_time();
+        if (s_pid_cal_edge_us > 0) {
+            const float tu = (float)(now - s_pid_cal_edge_us) / 1000000.0f;
+            s_pid_cal_amp_sum += (s_pid_cal_peak_hi - s_pid_cal_peak_lo) * 0.5f;
+            s_pid_cal_tu_sum += tu;
+            s_pid_cal_cycles += 1;
+            if (s_pid_cal_cycles >= 2) {
+                pid_cal_apply_heater(false);
+                if (s_pid_cal_active) {
+                    pid_cal_commit(settings);
+                }
+                return;
+            }
+        }
+        s_pid_cal_edge_us = now;
+        s_pid_cal_peak_hi = pv;
+        s_pid_cal_peak_lo = pv;
+        s_pid_cal_have_ext = true;
+    }
+
+    pid_cal_apply_heater(next_on);
+}
+
+bool process_controller_pid_cal_active(void)
+{
+    return s_pid_cal_active;
+}
+
+esp_err_t process_controller_start_pid_cal(void)
+{
+    if (s_pid_cal_active) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (!process_controller_settings_editable()) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (safety_manager_active_fault() != FAULT_NONE ||
+        !safety_manager_heating_permitted()) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    dryer_settings_t cfg {};
+    settings_manager_get(&cfg);
+    if (cfg.drying_temperature_c > k_pid_max_setpoint_c) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    sensor_data_t sensors {};
+    sensor_manager_get(&sensors);
+    relay_state_t coils {};
+    if (actuator_manager_refresh(&coils) != ESP_OK || !sensors.chamber_temp_valid ||
+        !sensors.hot_air_temp_valid) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (circulation_manager_is_active()) {
+        circulation_manager_stop();
+    }
+    s_pid_cal_note[0] = '\0';
+    s_pid_cal_active = true;
+    s_pid_cal_heater = false;
+    s_pid_cal_phase = 0;
+    s_pid_cal_cycles = 0;
+    s_pid_cal_start_us = esp_timer_get_time();
+    s_pid_cal_edge_us = 0;
+    s_pid_cal_sp = cfg.drying_temperature_c;
+    s_pid_cal_have_ext = false;
+    s_pid_cal_amp_sum = 0.0f;
+    s_pid_cal_tu_sum = 0.0f;
+    actuator_manager_close_door();
+    actuator_manager_set_elevator(false);
+    actuator_manager_set_fan(true);
+    ESP_LOGI(TAG, "PID autotune started at %.1f C", (double)s_pid_cal_sp);
+    return ESP_OK;
+}
+
+esp_err_t process_controller_stop_pid_cal(void)
+{
+    if (!s_pid_cal_active) {
+        return ESP_OK;
+    }
+    pid_cal_finish("Calibration Stopped");
+    return ESP_OK;
+}
+
 esp_err_t process_controller_start(void)
 {
+    if (s_pid_cal_active) {
+        ESP_LOGW(TAG, "START refused — PID calibration is running");
+        return ESP_ERR_INVALID_STATE;
+    }
     if (batch_manager_interrupted_pending()) {
         ESP_LOGW(TAG, "START refused — acknowledge interrupted batch first");
         return ESP_ERR_INVALID_STATE;
@@ -631,9 +874,7 @@ esp_err_t process_controller_resume_interrupted(void)
     }
 
     sensor_data_t sensors {};
-    if (sensor_manager_get(&sensors) != ESP_OK) {
-        return ESP_FAIL;
-    }
+    sensor_manager_get(&sensors);
     dryer_settings_t settings {};
     settings_manager_get(&settings);
 
@@ -683,15 +924,14 @@ esp_err_t process_controller_resume_interrupted(void)
     s_discharge_step = (discharge_step_t)disc_step;
     s_discharge_step_us = now;
     s_discharge_phase_pub = disc_step;
-    s_door_cmd_us = 0;
     s_elevator_cmd_us = 0;
 
     circulation_manager_configure(&settings);
-    actuator_manager_set_fan(true);
     safety_manager_request_heater(false);
 
     if (resume_state == DRYER_STATE_DRYING) {
-        actuator_manager_stop_door();
+        actuator_manager_set_fan(true);
+        actuator_manager_close_door();
         if (circulation_manager_start() != ESP_OK) {
             ESP_LOGW(TAG, "Resume: circulation start failed");
             batch_manager_abort();
@@ -703,8 +943,10 @@ esp_err_t process_controller_resume_interrupted(void)
             circulation_manager_stop();
         }
         actuator_manager_set_elevator(false);
-        actuator_manager_stop_door();
+        actuator_manager_set_fan(true);
+        actuator_manager_close_door();
     } else {
+        actuator_manager_set_fan(false);
         /* DISCHARGING — resume at saved sub-step; tick applies actuators. */
         if (circulation_manager_is_active()) {
             circulation_manager_stop();
@@ -722,6 +964,9 @@ esp_err_t process_controller_resume_interrupted(void)
 
 esp_err_t process_controller_abort(void)
 {
+    if (s_pid_cal_active) {
+        pid_cal_finish("Calibration Stopped");
+    }
     sensor_data_t sensors {};
     sensor_manager_get(&sensors);
     enqueue_summary("ABORTED", &sensors, nullptr);
@@ -829,14 +1074,6 @@ esp_err_t process_controller_manual_door_close(void)
     return actuator_manager_close_door();
 }
 
-esp_err_t process_controller_manual_door_stop(void)
-{
-    if (!require_manual()) {
-        return ESP_ERR_INVALID_STATE;
-    }
-    return actuator_manager_stop_door();
-}
-
 esp_err_t process_controller_assign_sensor(uint8_t new_addr, const char *role,
                                            char *msg, size_t msg_len)
 {
@@ -885,7 +1122,8 @@ esp_err_t process_controller_assign_sensor(uint8_t new_addr, const char *role,
 
 bool process_controller_manual_control_allowed(void)
 {
-    return s_state == DRYER_STATE_IDLE || s_state == DRYER_STATE_COMPLETE;
+    return !s_pid_cal_active &&
+           (s_state == DRYER_STATE_IDLE || s_state == DRYER_STATE_COMPLETE);
 }
 
 bool process_controller_settings_editable(void)
@@ -908,6 +1146,17 @@ void process_controller_tick(const sensor_data_t *sensors,
     }
 
     s_sample_queued_this_tick = false;
+
+    if (s_pid_cal_active) {
+        if (s_state != DRYER_STATE_IDLE && s_state != DRYER_STATE_COMPLETE &&
+            s_state != DRYER_STATE_FAULT) {
+            pid_cal_finish("Calibration Stopped");
+        } else {
+            pid_cal_tick(sensors, settings, status);
+            publish(sensors, settings, status);
+            return;
+        }
+    }
 
     if (logging_state(s_state) && !logger_is_healthy()) {
         enter_fault(FAULT_F009_SD_CARD_ERROR, sensors, status);
@@ -976,8 +1225,8 @@ void process_controller_tick(const sensor_data_t *sensors,
         note_temp(sensors);
 
         actuator_manager_set_fan(true);
-        /* Door already closed at PRECHECK — do not hold CLOSE coil for the batch. */
-        actuator_manager_stop_door();
+        /* R4 off keeps the door closed for the batch. */
+        actuator_manager_close_door();
         apply_heater_pid(sensors, settings);
         if (status != nullptr) {
             status->heater_duty_pct = s_heater_duty_pub;
@@ -1004,7 +1253,7 @@ void process_controller_tick(const sensor_data_t *sensors,
             }
             actuator_manager_set_elevator(false);
             actuator_manager_set_fan(true);
-            actuator_manager_stop_door();
+            actuator_manager_close_door();
 
             s_cooling_start_us = esp_timer_get_time();
             s_cooling_elapsed_s = 0;
@@ -1027,7 +1276,7 @@ void process_controller_tick(const sensor_data_t *sensors,
         }
         actuator_manager_set_elevator(false);
         actuator_manager_set_fan(true);
-        actuator_manager_stop_door();
+        actuator_manager_close_door();
         save_recovery_throttled(sensors, false);
 
         if (sensors->chamber_temp_valid &&
@@ -1064,9 +1313,9 @@ void process_controller_tick(const sensor_data_t *sensors,
             break;
 
         case DISCHARGE_SETTLE:
+            /* Keep R4 on. Releasing it would close the door. */
             actuator_manager_open_door();
             if (step_s >= k_door_settle_s) {
-                actuator_manager_stop_door();
                 actuator_manager_set_elevator(true);
                 s_discharge_step = DISCHARGE_ELEVATOR;
                 s_discharge_step_us = esp_timer_get_time();
@@ -1074,6 +1323,7 @@ void process_controller_tick(const sensor_data_t *sensors,
             break;
 
         case DISCHARGE_ELEVATOR:
+            actuator_manager_open_door();
             actuator_manager_set_elevator(true);
             if (step_s >= settings->discharge_time_s) {
                 actuator_manager_set_elevator(false);
@@ -1087,7 +1337,7 @@ void process_controller_tick(const sensor_data_t *sensors,
             actuator_manager_set_elevator(false);
             actuator_manager_close_door();
             if (step_s >= k_door_settle_s) {
-                actuator_manager_stop_door();
+                actuator_manager_close_door();
                 batch_manager_update_elapsed(s_drying_elapsed_s, s_cooling_elapsed_s,
                                              s_discharge_elapsed_s);
                 queue_sample(s_state, sensors, status);

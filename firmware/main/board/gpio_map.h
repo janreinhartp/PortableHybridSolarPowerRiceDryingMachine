@@ -5,6 +5,8 @@
  * Keep in sync with hardware/wiring/esp32-gpio-map.md
  *
  * Door travel limits are internal to the linear actuator (no ESP32 inputs).
+ * Door trigger is relay R4 only: ON opens, OFF closes. R5 stays off.
+ * Fan speed is set on an external controller. The relay only switches the fan on or off.
  * Emergency stop is hard-wired to the panel main contactor (no ESP32 input).
  */
 

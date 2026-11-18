@@ -4,6 +4,7 @@
 #include "system_status.h"
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -29,6 +30,8 @@ typedef struct {
     int16_t min_v;
     int16_t max_v;
     lv_coord_t bar_w;
+    bool target_shown;
+    float last_target;
 } ui_bar_gauge_t;
 
 typedef struct {
@@ -42,6 +45,9 @@ typedef struct {
     lv_obj_t *chart;
     lv_chart_series_t *ser_moist;
     lv_chart_series_t *ser_chamber;
+    size_t synced_head;
+    size_t synced_count;
+    bool seeded;
 } ui_trend_t;
 
 typedef struct {
@@ -49,6 +55,8 @@ typedef struct {
     lv_obj_t *leds[4];
     lv_obj_t *status[4];
     lv_obj_t *labels[4];
+    uint8_t last_bits;
+    bool have_last;
 } ui_actuator_leds_t;
 
 typedef void (*ui_confirm_cb_t)(void *user);

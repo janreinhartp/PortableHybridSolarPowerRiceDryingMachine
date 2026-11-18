@@ -46,7 +46,7 @@ void run_build(lv_obj_t *parent, const system_status_t *status)
     s_moist = ui_bar_gauge_create(parent, "Rice Moisture", "%", 0, 30, 328, 128, UI_COLOR_TEAL);
     lv_obj_set_pos(s_moist.root, 0, 0);
     s_chamber =
-        ui_bar_gauge_create(parent, "Chamber Temperature", "°C", 0, 80, 328, 128, UI_COLOR_AMBER);
+        ui_bar_gauge_create(parent, "Hot Air Temperature", "°C", 0, 110, 328, 128, UI_COLOR_AMBER);
     lv_obj_set_pos(s_chamber.root, 0, 136);
 
     s_trend = ui_trend_create(parent, 648, 264);
@@ -79,12 +79,14 @@ void run_update(const system_status_t *status)
     ui_bar_gauge_set(&s_moist, status->moisture_pct);
     ui_bar_gauge_set_target(&s_moist, true, status->target_moisture_pct);
 
-    ui_bar_gauge_set(&s_chamber, status->chamber_temp_c);
-    if (status->dryer_state == DRYER_STATE_COOLING) {
-        ui_bar_gauge_set_target(&s_chamber, true, status->cooling_temperature_c);
-    } else {
-        ui_bar_gauge_set_target(&s_chamber, true, status->drying_temperature_c);
+    const bool cooling = status->dryer_state == DRYER_STATE_COOLING;
+    if (s_chamber.title_lbl != nullptr) {
+        ui_label_set_text_if_changed(s_chamber.title_lbl,
+                                     cooling ? "Chamber Temperature" : "Hot Air Temperature");
     }
+    ui_bar_gauge_set(&s_chamber, cooling ? status->chamber_temp_c : status->hotair_temp_c);
+    ui_bar_gauge_set_target(&s_chamber, true, cooling ? status->cooling_temperature_c
+                                                      : status->drying_temperature_c);
 
     ui_trend_refresh(&s_trend);
     ui_leds_set(&s_leds, status);

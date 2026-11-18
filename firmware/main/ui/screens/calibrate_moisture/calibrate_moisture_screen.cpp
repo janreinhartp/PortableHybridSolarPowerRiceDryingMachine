@@ -1,5 +1,6 @@
 #include "calibrate_moisture_screen.h"
 
+#include <cstdint>
 #include <cstdio>
 
 #include "process_controller.h"
@@ -82,9 +83,11 @@ static void on_y_adjust(lv_event_t *e)
         ui_manager_set_banner("Calibration Available In Idle Only");
         return;
     }
-    const intptr_t packed = (intptr_t)lv_event_get_user_data(e);
+    /* Packed as (idx << 8) | (sign_byte). sign_byte is 0x01 / 0xFF — never
+     * OR a sign-extended intptr_t -1 or the index bits are wiped. */
+    const uintptr_t packed = (uintptr_t)lv_event_get_user_data(e);
     const int idx = (int)(packed >> 8);
-    const int sign = (int)(int8_t)(packed & 0xff);
+    const int sign = (int)(int8_t)(packed & 0xffu);
     float *y = (idx == 0) ? &s_draft.y1 : (idx == 1) ? &s_draft.y2 : &s_draft.y3;
     *y += 0.5f * (float)sign;
     if (*y < 0.0f) {
@@ -147,8 +150,8 @@ static void make_point_card(lv_obj_t *parent, int idx, lv_coord_t x, const char 
     s_pts[idx].y_lbl = ui_theme_make_label(card, "- %", ui_font_body(), UI_COLOR_CREAM);
     lv_obj_align(s_pts[idx].y_lbl, LV_ALIGN_TOP_LEFT, 80, 144);
 
-    const intptr_t down = ((intptr_t)idx << 8) | (intptr_t)(int8_t)-1;
-    const intptr_t up = ((intptr_t)idx << 8) | (intptr_t)(int8_t)1;
+    const uintptr_t down = ((uintptr_t)idx << 8) | 0xFFu; /* -1 as uint8 */
+    const uintptr_t up = ((uintptr_t)idx << 8) | 0x01u;
     lv_obj_t *minus =
         ui_theme_make_btn(card, "-", on_y_adjust, (void *)down, 48, 40, UI_COLOR_SURFACE_ALT);
     lv_obj_align(minus, LV_ALIGN_TOP_LEFT, 0, 136);
@@ -184,9 +187,9 @@ void calibrate_moisture_build(lv_obj_t *parent, const system_status_t *status)
     lv_obj_set_pos(s_note, 0, 84);
     lv_obj_set_width(s_note, 992);
 
-    make_point_card(parent, 0, 0, "Point 1 — Low");
-    make_point_card(parent, 1, 336, "Point 2 — Mid");
-    make_point_card(parent, 2, 672, "Point 3 — High");
+    make_point_card(parent, 0, 0, "Point 1 - Low");
+    make_point_card(parent, 1, 336, "Point 2 - Mid");
+    make_point_card(parent, 2, 672, "Point 3 - High");
 
     lv_obj_t *back =
         ui_theme_make_btn(parent, "Back", on_back, nullptr, 240, 56, UI_COLOR_SURFACE_ALT);
@@ -209,7 +212,7 @@ void calibrate_moisture_update(const system_status_t *status)
     }
     char buf[96];
     if (status->moisture_ok) {
-        snprintf(buf, sizeof(buf), "Live: %.3f V → %.1f %%", status->moisture_voltage,
+        snprintf(buf, sizeof(buf), "Live: %.3f V -> %.1f %%", status->moisture_voltage,
                  status->moisture_pct);
     } else {
         snprintf(buf, sizeof(buf), "Live: moisture offline");

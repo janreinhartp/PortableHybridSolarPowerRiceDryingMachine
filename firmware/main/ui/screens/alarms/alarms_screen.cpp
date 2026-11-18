@@ -1,5 +1,6 @@
 #include "alarms_screen.h"
 
+#include <cstddef>
 #include <cstdio>
 
 #include "logger.h"
@@ -115,6 +116,9 @@ void alarms_update(const system_status_t *status)
 
     logger_alarm_t rows[LOGGER_ALARM_MAX] = {};
     const size_t n = logger_copy_alarms(rows, LOGGER_ALARM_MAX);
+    if (n == SIZE_MAX) {
+        return;
+    }
     for (size_t i = 0; i < LOGGER_ALARM_MAX; ++i) {
         lv_obj_t *lbl =
             s_rows[i] != nullptr ? (lv_obj_t *)lv_obj_get_user_data(s_rows[i]) : nullptr;
@@ -122,12 +126,12 @@ void alarms_update(const system_status_t *status)
             continue;
         }
         if (i >= n) {
-            lv_label_set_text(lbl, "");
+            ui_label_set_text_if_changed(lbl, "");
             continue;
         }
         char line[128];
         snprintf(line, sizeof(line), "%.23s   %.39s   %.15s", rows[i].timestamp, rows[i].code,
                  rows[i].state);
-        lv_label_set_text(lbl, line);
+        ui_label_set_text_if_changed(lbl, line);
     }
 }

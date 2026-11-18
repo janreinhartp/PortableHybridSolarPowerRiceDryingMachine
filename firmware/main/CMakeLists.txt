@@ -33,6 +33,7 @@ idf_component_register(
         "ui/screens/boot/boot_screen.cpp"
         "ui/screens/calibrate_moisture/calibrate_moisture_screen.cpp"
         "ui/screens/set_clock/set_clock_screen.cpp"
+        "ui/screens/pid_cal/pid_cal_screen.cpp"
     INCLUDE_DIRS
         "."
         "board"
@@ -67,6 +68,7 @@ idf_component_register(
         "ui/screens/boot"
         "ui/screens/calibrate_moisture"
         "ui/screens/set_clock"
+        "ui/screens/pid_cal"
     REQUIRES
         nvs_flash
         esp_timer
@@ -74,6 +76,7 @@ idf_component_register(
         esp_netif
         esp_event
         esp_http_server
+        driver
         rgb_lcd_port
         touch
         lvgl_port

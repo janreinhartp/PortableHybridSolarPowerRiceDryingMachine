@@ -75,11 +75,20 @@ esp_err_t process_controller_manual_all_off(void);
 esp_err_t process_controller_manual_toggle_circulation(void);
 esp_err_t process_controller_manual_door_open(void);
 esp_err_t process_controller_manual_door_close(void);
-esp_err_t process_controller_manual_door_stop(void);
+
+/** True while relay PID autotune is running. Not a batch and not resumed. */
+bool process_controller_pid_cal_active(void);
+/**
+ * Idle autotune of the hot-air temperature around the drying setpoint.
+ * ESP_ERR_INVALID_ARG when that setpoint is above 70 °C.
+ */
+esp_err_t process_controller_start_pid_cal(void);
+/** Stop autotune without saving gains. */
+esp_err_t process_controller_stop_pid_cal(void);
 
 /**
  * Commissioning: scan the bus and assign one XY-MD03.
- * new_addr is the product id (hot-air 1, chamber 2). Refused during a batch.
+ * new_addr is the product id (hot-air 2, chamber 1). Refused during a batch.
  * msg receives a short result string.
  */
 esp_err_t process_controller_assign_sensor(uint8_t new_addr, const char *role,

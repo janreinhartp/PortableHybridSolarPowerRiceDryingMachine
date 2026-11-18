@@ -107,22 +107,8 @@ esp_err_t actuator_manager_close_door(void)
     }
     esp_err_t err = relay_modbus_close_door();
     if (err == ESP_OK) {
-        s_state.door_close = true;
-        s_state.door_open = false;
-        s_state.online = true;
-    }
-    return err;
-}
-
-esp_err_t actuator_manager_stop_door(void)
-{
-    if (ensure_online() != ESP_OK) {
-        return ESP_ERR_INVALID_STATE;
-    }
-    esp_err_t err = relay_modbus_stop_door();
-    if (err == ESP_OK) {
-        s_state.door_open = false;
         s_state.door_close = false;
+        s_state.door_open = false;
         s_state.online = true;
     }
     return err;

@@ -11,7 +11,7 @@ Firmware reference: `firmware/main/board/gpio_map.h`
 
 | Topic | Decision |
 |---|---|
-| Door travel limits | **Not wired to the ESP32.** The linear actuator provides internal end-of-travel limit switches. Firmware only commands door OPEN/CLOSE relays (R4/R5) and must never energize both at once. |
+| Door travel limits | **Not wired to the ESP32.** The linear actuator provides internal end-of-travel limit switches. Firmware commands door travel with **R4 only**: ON opens, OFF closes. **R5 stays off.** |
 | Emergency stop | **Pure electrical.** The E-stop drops the main contactor on the electrical panel and removes power from high-power loads. It is **not** an ESP32 digital input and is **not** handled in software. |
 
 After an E-stop or power loss, the controller must still boot into a safe commanded state (heater/fan/elevator OFF) and require operator confirmation before restarting a batch.
@@ -122,7 +122,7 @@ Factory address is usually **1**. Commission **one probe at a time** (relay shou
 | Protocol | FC **0x06** write / FC **0x03** read holding regs; channels **0x0001–0x0008**; Close all = reg `0x0000` value `0x0800` |
 | Open / Close | Value `0x0100` open, `0x0200` close (matches Eletechsup Modbus PDF) |
 
-Relay channels: R1=1 … R5=5. R4/R5 must never both be ON.
+Relay channels: R1=1 … R5=5. Door uses R4 only. R5 stays off.
 
 ---
 
@@ -140,18 +140,18 @@ Product firmware talks at **9600 8N1**. Factory defaults match: leave relay baud
 4. Power **on** the relay (12 V). Leave A/B/GND connected to the Waveshare RS485 header.
 5. Confirm Manual Control can toggle fan/elevator (heater still OFF until safety checks).
 
-### B. XY-MD03 hot-air probe — address → 1
+### B. XY-MD03 hot-air probe — address → 2
 
 1. Connect **only one** XY-MD03 (factory ID usually **1** @ **9600**): VCC, GND, A, B.
-2. HMI **Commission Sensors → Assign Hot Air (1)**, then power-cycle the probe.
-3. Confirm it answers at address **1**.
+2. HMI **Commission Sensors → Assign Hot Air (2)**, then power-cycle the probe.
+3. Confirm it answers at address **2**.
 
-### C. XY-MD03 chamber probe — address → 2
+### C. XY-MD03 chamber probe — address → 1
 
-1. Disconnect the hot-air probe (or leave it at addr 1 — it will not collide once chamber is reassigned).
+1. Disconnect the hot-air probe (or leave it at addr 2 — it will not collide once chamber is reassigned).
 2. Connect **only** the second factory probe (usually still ID **1** @ **9600**).
-3. HMI **Commission Sensors → Assign Chamber (2)**, power-cycle again.
-4. Reconnect both probes + relay. Bus is all **9600**: hot-air **@1**, chamber **@2**, relay **@10**.
+3. HMI **Commission Sensors → Assign Chamber (1)**, power-cycle again.
+4. Reconnect both probes + relay. Bus is all **9600**: hot-air **@2**, chamber **@1**, relay **@10**.
 
 ### D. ESP32 firmware
 
@@ -167,7 +167,7 @@ Product firmware talks at **9600 8N1**. Factory defaults match: leave relay baud
 
 | GPIO | Notes |
 |-----:|-------|
-| 6 | Board GPIO header (often the only clearly free digital I/O) |
+| 6 | Board GPIO header. Free. Fan speed is an external controller, not this pin. |
 | 26 | Not used (was wrongly claimed as DE/RE — onboard RS485 is auto-DE) |
 | 27 | Spare if present on header |
 | 28 | Spare if present on header |
@@ -182,21 +182,18 @@ Confirm availability on the physical header before wiring. Door limits and E-sto
 
 ## 7. Actuators not on ESP32 GPIO
 
-Heater, fan, elevator, and door open/close are controlled through the **RS485 Modbus relay board** (address 10), not direct ESP32 GPIO.
+Heater, fan power, elevator, and the door trigger are controlled through the **RS485 Modbus relay board** (address 10). Fan speed is adjusted on an external controller. The relay only turns the fan on or off.
 
 | Relay | Function |
 |------:|----------|
 | R1 | Elevator |
 | R2 | Heater |
-| R3 | Fan |
-| R4 | Door OPEN |
-| R5 | Door CLOSE |
+| R3 | Fan power (on/off). Speed is set on the external controller. |
+| R4 | Door trigger: ON opens, OFF closes |
+| R5 | Unused — firmware forces this coil off |
 | R6–R8 | Spare |
 
-Door motion stops at the actuator’s internal limits. Software must still:
-- Never assert R4 and R5 together
-- Use configured run/timeouts where needed for process sequencing
-- Leave the door in a safe commanded relay state after faults (see master plan)
+Door motion stops at the actuator’s internal limits. Hold R4 on for the whole time the door must stay open (including elevator discharge). Turning R4 off closes the door. There is no mid-travel stop.
 
 ---
 
